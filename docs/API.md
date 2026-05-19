@@ -155,7 +155,7 @@ The server stores ciphertext only — it never sees plaintext.
 {
   "recipient_username": "bob",
   "ciphertext": "base64url-encoded-aead-ciphertext",
-  "session_key": "base64url-encoded-hpke-enc",
+  "encapsulated_key": "base64url-encoded-hpke-enc",
   "nonce": "base64url-encoded-nonce"
 }
 ```
@@ -164,7 +164,7 @@ The server stores ciphertext only — it never sees plaintext.
 |----------------------|---|---|---|
 | `recipient_username` | string | ✓ | Must be a registered user |
 | `ciphertext`         | string | ✓ | HPKE-encrypted payload (base64url) |
-| `session_key`        | string | ✓ | HPKE `enc` value (base64url) |
+| `encapsulated_key`   | string | ✓ | HPKE `enc` value (base64url) |
 | `nonce`              | string | ✓ | 12-byte AES-GCM nonce (base64url) |
 
 **Success — 201 Created:**
@@ -205,7 +205,7 @@ Fetch all messages in the authenticated user's inbox (received) and outbox (sent
       "recipient_id": "a3bb189e-8bf9-3888-9912-ace4e6543002",
       "recipient_username": "bob",
       "ciphertext": "base64url-encoded-aead-ciphertext",
-      "session_key": "base64url-encoded-hpke-enc",
+      "encapsulated_key": "base64url-encoded-hpke-enc",
       "nonce": "base64url-encoded-nonce",
       "sent_at": "2026-05-19T14:32:00Z",
       "is_forwarded": false,
@@ -314,7 +314,7 @@ Returns full message objects including ciphertext.
       "recipient_id": "a3bb189e-8bf9-3888-9912-ace4e6543002",
       "recipient_username": "bob",
       "ciphertext": "base64url-encoded-aead-ciphertext",
-      "session_key": "base64url-encoded-hpke-enc",
+      "encapsulated_key": "base64url-encoded-hpke-enc",
       "nonce": "base64url-encoded-nonce",
       "sent_at": "2026-05-19T14:32:00Z",
       "read_at": null,
