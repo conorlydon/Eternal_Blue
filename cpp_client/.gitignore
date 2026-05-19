@@ -1,0 +1,7 @@
+# CMake out-of-tree build dir
+/build/
+
+# Object and archive files (belt-and-braces — out-of-tree build keeps these
+# inside build/ anyway, but if someone runs `g++ -c` directly in src/...)
+*.o
+*.a
