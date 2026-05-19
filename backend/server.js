@@ -10,6 +10,7 @@ import authRoutes         from './routes/auth.js'
 import keyRoutes          from './routes/keys.js'
 import conversationRoutes from './routes/conversations.js'
 import messageRoutes      from './routes/messages.js'
+import blockchainRoutes   from './routes/blockchain.js'
 
 // Local dev terminates TLS in Fastify itself (self-signed cert).
 // The VM terminates TLS in nginx and proxies plain HTTP to here — in that
@@ -53,6 +54,7 @@ await app.register(authRoutes,         { prefix: '/api' })
 await app.register(keyRoutes,          { prefix: '/api' })
 await app.register(conversationRoutes, { prefix: '/api' })
 await app.register(messageRoutes,      { prefix: '/api' })
+await app.register(blockchainRoutes,   { prefix: '/api' })
 
 // health check
 app.get('/health', async () => ({

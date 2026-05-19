@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     user_b_id       UUID NOT NULL REFERENCES users(id),
     last_message_at TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_a_id, user_b_id)
+    UNIQUE(user_a_id, user_b_id),
+    CHECK (user_a_id < user_b_id)
 );
 
 -- ---------------------------------------------------------------------------

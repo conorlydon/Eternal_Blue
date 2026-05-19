@@ -39,15 +39,31 @@ export default async function conversationRoutes(app) {
     const limit  = Math.min(parseInt(req.query.limit) || 50, 100)
     const before = req.query.before || new Date().toISOString()
 
-    // verify user is a participant
     const { rows: conv } = await pool.query(
-      `SELECT * FROM conversations WHERE id = $1
-       AND (user_a_id = $2 OR user_b_id = $2)`,
-      [conversation_id, userId]
+      `SELECT c.*, ua.username AS user_a_username, ub.username AS user_b_username
+       FROM conversations c
+       JOIN users ua ON ua.id = c.user_a_id
+       JOIN users ub ON ub.id = c.user_b_id
+       WHERE c.id = $1`,
+      [conversation_id]
     )
     if (conv.length === 0) {
+      return reply.code(404).send({ error: 'NOT_FOUND', message: 'Conversation not found' })
+    }
+    if (conv[0].user_a_id !== userId && conv[0].user_b_id !== userId) {
       return reply.code(403).send({ error: 'FORBIDDEN', message: 'Not a participant' })
     }
+    const with_user_id  = conv[0].user_a_id === userId ? conv[0].user_b_id       : conv[0].user_a_id
+    const with_username = conv[0].user_a_id === userId ? conv[0].user_b_username  : conv[0].user_a_username
+
+    const { rows: countRows } = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM messages m
+       WHERE m.conversation_id = $1
+         AND (m.deleted_by_sender = FALSE OR m.sender_id != $2)
+         AND (m.deleted_by_recipient = FALSE OR m.recipient_id != $2)`,
+      [conversation_id, userId]
+    )
 
     const { rows } = await pool.query(
       `SELECT
@@ -76,8 +92,10 @@ export default async function conversationRoutes(app) {
     )
     return reply.send({
       conversation_id,
+      with_user_id,
+      with_username,
       messages: rows,
-      total: rows.length
+      total: parseInt(countRows[0].total)
     })
   })
 
@@ -89,11 +107,13 @@ export default async function conversationRoutes(app) {
     const { conversation_id } = req.params
 
     const { rows: conv } = await pool.query(
-      `SELECT * FROM conversations WHERE id = $1
-       AND (user_a_id = $2 OR user_b_id = $2)`,
-      [conversation_id, userId]
+      `SELECT * FROM conversations WHERE id = $1`,
+      [conversation_id]
     )
     if (conv.length === 0) {
+      return reply.code(404).send({ error: 'NOT_FOUND', message: 'Conversation not found' })
+    }
+    if (conv[0].user_a_id !== userId && conv[0].user_b_id !== userId) {
       return reply.code(403).send({ error: 'FORBIDDEN', message: 'Not a participant' })
     }
 

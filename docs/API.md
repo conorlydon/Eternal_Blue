@@ -1,4 +1,4 @@
-# Eternal-Blue API Reference
+    # Eternal-Blue API Reference
 
 **Base URL:** `https://eternalblue.theburkenator.com/api`  
 **During development:** `http://200.69.13.70:3000/api`  
@@ -432,7 +432,7 @@ Public endpoint. No auth required. Used by nginx and during development to confi
 | DELETE | `/messages/:id/revoke`                     | 🔒 | Revoke forwarded access                       |
 | GET    | `/conversations`                           | 🔒 | Load all conversations                        |
 | GET    | `/conversations/:conversation_id/messages` | 🔒 | Load all messages for a specific conversation |
-| GET    | `/conversations/:conversation_id/read` | 🔒 | Mark all unread messages in a conversation as read |
+| POST   | `/conversations/:conversation_id/read` | 🔒 | Mark all unread messages in a conversation as read |
 | GET    | `/keys/:username`                          | 🔒 | Get a user's public key                       |
 | GET    | `/blockchain/digest/:id`                   | 🔒 | Get on-chain record for message               |
 | GET    | `/health`                                  | — | Server health check                           |

@@ -1,5 +1,4 @@
 import argon2 from 'argon2'
-import { randomUUID } from 'crypto'
 import pool from '../db/index.js'
 
 export default async function authRoutes(app) {
@@ -33,7 +32,7 @@ export default async function authRoutes(app) {
          RETURNING id, username`,
         [username, hash, public_key]
       )
-      return reply.code(201).send(rows[0])
+      return reply.code(201).send({ user_id: rows[0].id, username: rows[0].username })
     } catch (err) {
       if (err.code === '23505') {
         return reply.code(409).send({ error: 'CONFLICT', message: 'Username already taken' })
