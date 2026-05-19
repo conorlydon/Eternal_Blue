@@ -1,0 +1,25 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Eternal-blue secure messaging backend",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "Eternal-blue team",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/jwt": "^10.1.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "argon2": "^0.44.0",
+    "dotenv": "^17.4.2",
+    "ethers": "^6.16.0",
+    "fastify": "^5.8.5",
+    "pg": "^8.21.0"
+  }
+}
