@@ -5,3 +5,6 @@
 /backend/digest-service/.env
 /backend/digest-service/node_modules
 /backend/digest-service/package-lock.json
+/backend/certs/
+/cpp_client/DELIVERABLES.md
+/cpp_client/reference/

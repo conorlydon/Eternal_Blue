@@ -3,6 +3,7 @@ import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import dotenv from 'dotenv'
+import fs from 'node:fs'
 dotenv.config()
 
 import authRoutes         from './routes/auth.js'
@@ -10,7 +11,19 @@ import keyRoutes          from './routes/keys.js'
 import conversationRoutes from './routes/conversations.js'
 import messageRoutes      from './routes/messages.js'
 
-const app = Fastify({ logger: true })
+// Local dev terminates TLS in Fastify itself (self-signed cert).
+// The VM terminates TLS in nginx and proxies plain HTTP to here — in that
+// deployment, TLS_CERT/TLS_KEY are unset and Fastify falls back to plain HTTP.
+const useTls = process.env.TLS_CERT && process.env.TLS_KEY
+const app = Fastify({
+  logger: true,
+  ...(useTls && {
+    https: {
+      key:  fs.readFileSync(process.env.TLS_KEY),
+      cert: fs.readFileSync(process.env.TLS_CERT),
+    }
+  })
+})
 
 // security headers
 await app.register(helmet)
