@@ -1,4 +1,4 @@
-# Eternal-Blue Database Schema
+ # Eternal-Blue Database Schema
 
 **Database:** PostgreSQL  
 **Host:** localhost (internal only — not exposed outside the VM)  

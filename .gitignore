@@ -2,3 +2,6 @@
 /backend/.env
 /backend/package-lock.json
 /backend/node_modules
+/backend/digest-service/.env
+/backend/digest-service/node_modules
+/backend/digest-service/package-lock.json
