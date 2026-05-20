@@ -12,6 +12,10 @@ import conversationRoutes from './routes/conversations.js'
 import messageRoutes      from './routes/messages.js'
 import blockchainRoutes   from './routes/blockchain.js'
 
+import staticFiles from '@fastify/static'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 // Local dev terminates TLS in Fastify itself (self-signed cert).
 // The VM terminates TLS in nginx and proxies plain HTTP to here — in that
 // deployment, TLS_CERT/TLS_KEY are unset and Fastify falls back to plain HTTP.
@@ -47,6 +51,12 @@ app.decorate('authenticate', async (req, reply) => {
   } catch (err) {
     return reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Invalid or expired token' })
   }
+})
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+await app.register(staticFiles, {
+  root: path.join(__dirname, '../frontend'),
+  prefix: '/'
 })
 
 // routes
