@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Message Verification — Eternal Blue</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      border: 1px solid #e0e0e0;
+      padding: 2rem;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: #333;
+    }
+
+    input, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: monospace;
+      margin-bottom: 1rem;
+      background: #fafafa;
+      color: #1a1a1a;
+    }
+
+    textarea { height: 100px; resize: vertical; }
+
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #555;
+      background: white;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #1a1a1a;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    button:hover { background: #333; }
+    button:disabled { background: #999; cursor: not-allowed; }
+
+    .result {
+      margin-top: 1.5rem;
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: none;
+    }
+
+    .result.pass {
+      background: #f0faf4;
+      border: 1px solid #86efac;
+    }
+
+    .result.fail {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 1rem;
+    }
+
+    .badge {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 99px;
+    }
+
+    .badge.pass { background: #dcfce7; color: #15803d; }
+    .badge.fail { background: #fee2e2; color: #b91c1c; }
+
+    .result-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .detail-row {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 0;
+      border-top: 1px solid rgba(0,0,0,0.06);
+    }
+
+    .detail-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .detail-value {
+      font-size: 12px;
+      font-family: monospace;
+      color: #1a1a1a;
+      word-break: break-all;
+    }
+
+    .detail-value a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+
+    .detail-value a:hover { text-decoration: underline; }
+
+    .error-msg {
+      margin-top: 1rem;
+      padding: 10px 12px;
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #b91c1c;
+      display: none;
+    }
+
+    .spinner {
+      display: none;
+      text-align: center;
+      padding: 1rem;
+      font-size: 13px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Message fidelity verification</h1>
+    <p class="subtitle">Verify a message has not been tampered with since it was recorded on the Ethereum Sepolia blockchain.</p>
+
+    <label for="message-id">Message ID</label>
+    <input type="text" id="message-id" placeholder="e.g. c9bf9e57-1685-4c89-bafb-ff5af830be8a" />
+
+    <label for="ciphertext">Ciphertext</label>
+    <textarea id="ciphertext" placeholder="Paste the original base64-encoded ciphertext here"></textarea>
+
+    <button id="verify-btn" onclick="verify()">Verify message</button>
+
+    <div class="error-msg" id="error-msg"></div>
+    <div class="spinner" id="spinner">Checking on-chain record...</div>
+
+    <div class="result" id="result">
+      <div class="result-header">
+        <span class="badge" id="result-badge"></span>
+        <span class="result-title" id="result-title"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Message ID</span>
+        <span class="detail-value" id="out-message-id"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Computed digest</span>
+        <span class="detail-value" id="out-computed"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Recorded digest</span>
+        <span class="detail-value" id="out-recorded"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Batch hash (on-chain)</span>
+        <span class="detail-value" id="out-batch-hash"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Transaction hash</span>
+        <span class="detail-value" id="out-tx"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Block number</span>
+        <span class="detail-value" id="out-block"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Recorded at</span>
+        <span class="detail-value" id="out-time"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Etherscan</span>
+        <span class="detail-value" id="out-etherscan"></span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    async function sha256hex(str) {
+      const buf = await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(str)
+      )
+      return '0x' + Array.from(new Uint8Array(buf))
+        .map(b => b.toString(16).padStart(2, '0')).join('')
+    }
+
+    async function keccak256(input) {
+      const { ethers } = await import('https://esm.sh/ethers@6')
+      if (input instanceof Uint8Array) {
+        return ethers.keccak256(input)
+      }
+      return ethers.keccak256(ethers.toUtf8Bytes(input))
+    }
+
+    window.verify = async function () {
+      const messageId  = document.getElementById('message-id').value.trim()
+      const ciphertext = document.getElementById('ciphertext').value.trim()
+      const errorEl    = document.getElementById('error-msg')
+      const spinner    = document.getElementById('spinner')
+      const resultEl   = document.getElementById('result')
+      const btn        = document.getElementById('verify-btn')
+
+      errorEl.style.display  = 'none'
+      resultEl.style.display = 'none'
+
+      if (!messageId || !ciphertext) {
+        errorEl.textContent    = 'Please enter both a message ID and ciphertext.'
+        errorEl.style.display  = 'block'
+        return
+      }
+
+      btn.disabled           = true
+      spinner.style.display  = 'block'
+
+      try {
+        // 1. fetch the on-chain record from the API
+        const res  = await fetch(`/api/blockchain/digest/${messageId}`)
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.message || 'Failed to fetch on-chain record')
+        }
+
+        // 2. recompute the digest of the ciphertext locally
+        const { ethers } = await import('https://esm.sh/ethers@6')
+        const bytes          = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0))
+        const computedDigest = ethers.keccak256(bytes)
+
+        // 3. compare against recorded digest
+        const digestMatch = computedDigest.toLowerCase() === data.digest.toLowerCase()
+
+        // 4. show results
+        const passed = digestMatch
+        resultEl.className = `result ${passed ? 'pass' : 'fail'}`
+
+        document.getElementById('result-badge').className  = `badge ${passed ? 'pass' : 'fail'}`
+        document.getElementById('result-badge').textContent = passed ? 'PASS' : 'FAIL'
+        document.getElementById('result-title').textContent = passed
+          ? 'Message is untampered — digest matches on-chain record'
+          : 'Digest mismatch — message may have been altered'
+
+        document.getElementById('out-message-id').textContent = data.message_id
+        document.getElementById('out-computed').textContent   = computedDigest
+        document.getElementById('out-recorded').textContent   = data.digest
+        document.getElementById('out-batch-hash').textContent = data.batch_hash
+        document.getElementById('out-tx').textContent         = data.tx_hash
+        document.getElementById('out-block').textContent      = data.block_number
+        document.getElementById('out-time').textContent       = new Date(data.recorded_at).toUTCString()
+        document.getElementById('out-etherscan').innerHTML    =
+          `<a href="${data.sepolia_url}" target="_blank">${data.sepolia_url}</a>`
+
+        resultEl.style.display = 'block'
+
+      } catch (err) {
+        errorEl.textContent   = err.message
+        errorEl.style.display = 'block'
+      } finally {
+        btn.disabled          = false
+        spinner.style.display = 'none'
+      }
+    }
+  </script>
+</body>
+</html>
