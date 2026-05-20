@@ -93,10 +93,41 @@ Authenticate and receive a JWT.
 ```
 
 **Errors:**
-- `401 UNAUTHORIZED` — wrong password
-- `404 NOT_FOUND` — username does not exist
+- `401 UNAUTHORIZED` — username does not exist or password is incorrect (deliberately indistinguishable)
 
 > **Note:** Token lifetime is 24 hours. The C++ client stores this in memory only — not persisted to disk.
+
+---
+
+### PATCH /auth/password 🔒
+Change the authenticated user's password. Requires the current password for verification.
+
+Rate limited to 5 attempts per minute.
+
+**Request:**
+```json
+{
+  "current_password": "correct-horse-battery-staple",
+  "new_password": "new-strong-passphrase-here"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `current_password` | string | ✓ | Must match the stored hash |
+| `new_password` | string | ✓ | Min 12 chars, must differ from current |
+
+**Success — 200 OK:**
+```json
+{
+  "updated": true,
+  "updated_at": "2026-05-20T10:00:00Z"
+}
+```
+
+**Errors:**
+- `400 INVALID_INPUT` — new password is the same as current
+- `401 UNAUTHORIZED` — current password is incorrect
 
 ---
 
@@ -423,6 +454,7 @@ Public endpoint. No auth required. Used by nginx and during development to confi
 |--------|--------------------------------------------|---|-----------------------------------------------|
 | POST   | `/auth/register`                           | — | Register + publish public key                 |
 | POST   | `/auth/login`                              | — | Login, receive JWT                            |
+| PATCH  | `/auth/password`                           | 🔒 | Change password                               |
 | GET    | `/keys/:username`                          | 🔒 | Get a user's public key                       |
 | PUT    | `/keys/update`                             | 🔒 | Rotate own public key                         |
 | POST   | `/messages`                                | 🔒 | Send encrypted message                        |
@@ -432,7 +464,7 @@ Public endpoint. No auth required. Used by nginx and during development to confi
 | DELETE | `/messages/:id/revoke`                     | 🔒 | Revoke forwarded access                       |
 | GET    | `/conversations`                           | 🔒 | Load all conversations                        |
 | GET    | `/conversations/:conversation_id/messages` | 🔒 | Load all messages for a specific conversation |
-| POST   | `/conversations/:conversation_id/read` | 🔒 | Mark all unread messages in a conversation as read |
-| GET    | `/keys/:username`                          | 🔒 | Get a user's public key                       |
+| POST   | `/conversations/:conversation_id/read`     | 🔒 | Mark all unread messages as read              |
+| DELETE | `/messages/:id`                            | 🔒 | Delete a message                              |
 | GET    | `/blockchain/digest/:id`                   | 🔒 | Get on-chain record for message               |
 | GET    | `/health`                                  | — | Server health check                           |

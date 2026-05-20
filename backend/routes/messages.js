@@ -93,11 +93,22 @@ export default async function messageRoutes(app) {
 
   // GET /api/messages
   app.get('/messages', {
-    onRequest: [app.authenticate]
+    onRequest: [app.authenticate],
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          box:   { type: 'string', enum: ['inbox', 'outbox', 'all'] },
+          limit: { type: 'integer', minimum: 1, maximum: 100 },
+          since: { type: 'string', format: 'date-time' }
+        },
+        additionalProperties: false
+      }
+    }
   }, async (req, reply) => {
     const userId = req.user.user_id
     const box    = req.query.box   || 'all'
-    const limit  = Math.min(parseInt(req.query.limit) || 50, 100)
+    const limit  = Math.min(req.query.limit || 50, 100)
     const since  = req.query.since || null
 
     let boxFilter
