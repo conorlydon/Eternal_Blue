@@ -39,21 +39,23 @@ HttpResponse HttpClient::request(std::string_view method,
     req << "\r\n" << body;
 
     conn.write(req.str());
-    std::string raw = conn.read_all();
+    return parse_http_response(conn.read_all());
+}
 
+HttpResponse parse_http_response(std::string_view raw) {
     // split headers from body on the blank line
     auto sep = raw.find("\r\n\r\n");
-    if (sep == std::string::npos)
+    if (sep == std::string_view::npos)
         throw HttpError("malformed response: no header/body separator");
 
     // status line: "HTTP/1.1 <code> <reason>"
     auto sp1 = raw.find(' ');
     auto sp2 = raw.find(' ', sp1 + 1);
-    if (sp1 == std::string::npos || sp2 == std::string::npos)
+    if (sp1 == std::string_view::npos || sp2 == std::string_view::npos)
         throw HttpError("malformed status line");
 
     HttpResponse resp;
-    resp.status_code = std::stoi(raw.substr(sp1 + 1, sp2 - sp1 - 1));
-    resp.body = raw.substr(sep + 4);
+    resp.status_code = std::stoi(std::string(raw.substr(sp1 + 1, sp2 - sp1 - 1)));
+    resp.body = std::string(raw.substr(sep + 4));
     return resp;
 }

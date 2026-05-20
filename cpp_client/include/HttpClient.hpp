@@ -14,6 +14,9 @@ struct HttpResponse {
     std::string body;
 };
 
+// parse a raw http/1.1 response into status + body; throws HttpError if malformed
+HttpResponse parse_http_response(std::string_view raw);
+
 // model A: holds config only, opens a fresh TlsConnection per request (Connection: close)
 class HttpClient {
 public:
