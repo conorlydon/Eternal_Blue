@@ -75,6 +75,7 @@ export default async function conversationRoutes(app) {
          m.ciphertext,
          m.encapsulated_key,
          m.nonce,
+         m.sent_at_ms,
          m.sent_at,
          m.read_at,
          m.is_forwarded,

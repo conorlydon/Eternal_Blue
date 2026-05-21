@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS messages (
     ciphertext            TEXT NOT NULL,
     encapsulated_key      TEXT NOT NULL,
     nonce                 TEXT NOT NULL,
+    sent_at_ms            BIGINT NOT NULL,
     sent_at               TIMESTAMPTZ DEFAULT NOW(),
     read_at               TIMESTAMPTZ DEFAULT NULL,
     is_forwarded          BOOLEAN DEFAULT FALSE,

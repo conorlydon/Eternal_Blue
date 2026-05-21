@@ -9,19 +9,20 @@ export default async function messageRoutes(app) {
     schema: {
       body: {
         type: 'object',
-        required: ['recipient_username', 'ciphertext', 'encapsulated_key', 'nonce'],
+        required: ['recipient_username', 'ciphertext', 'encapsulated_key', 'nonce', 'sent_at_ms'],
         properties: {
           recipient_username: { type: 'string' },
           ciphertext:         { type: 'string' },
           encapsulated_key:   { type: 'string' },
-          nonce:              { type: 'string' }
+          nonce:              { type: 'string' },
+          sent_at_ms:         { type: 'integer', minimum: 0 }
         },
         additionalProperties: false
       }
     }
   }, async (req, reply) => {
     const senderId = req.user.user_id
-    const { recipient_username, ciphertext, encapsulated_key, nonce } = req.body
+    const { recipient_username, ciphertext, encapsulated_key, nonce, sent_at_ms } = req.body
 
     // look up recipient
     const { rows: recipientRows } = await pool.query(
@@ -60,10 +61,10 @@ export default async function messageRoutes(app) {
 
       const { rows: msgRows } = await client.query(
         `INSERT INTO messages
-           (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key, nonce)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, sent_at`,
-        [conversationId, senderId, recipientId, ciphertext, encapsulated_key, nonce]
+           (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key, nonce, sent_at_ms)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, sent_at, sent_at_ms`,
+        [conversationId, senderId, recipientId, ciphertext, encapsulated_key, nonce, sent_at_ms]
       )
       const message = msgRows[0]
 
@@ -81,7 +82,7 @@ export default async function messageRoutes(app) {
       )
 
       await client.query('COMMIT')
-      return reply.code(201).send({ message_id: message.id, sent_at: message.sent_at })
+      return reply.code(201).send({ message_id: message.id, sent_at: message.sent_at, sent_at_ms: message.sent_at_ms })
 
     } catch (err) {
       await client.query('ROLLBACK')
@@ -126,6 +127,7 @@ export default async function messageRoutes(app) {
          m.ciphertext,
          m.encapsulated_key,
          m.nonce,
+         m.sent_at_ms,
          m.sent_at,
          m.is_forwarded,
          m.original_message_id
@@ -158,6 +160,7 @@ export default async function messageRoutes(app) {
          m.ciphertext,
          m.encapsulated_key,
          m.nonce,
+         m.sent_at_ms,
          m.sent_at,
          m.read_at,
          m.is_forwarded,
@@ -220,19 +223,20 @@ export default async function messageRoutes(app) {
     schema: {
       body: {
         type: 'object',
-        required: ['forward_to_username', 'ciphertext', 'encapsulated_key', 'nonce'],
+        required: ['forward_to_username', 'ciphertext', 'encapsulated_key', 'nonce', 'sent_at_ms'],
         properties: {
           forward_to_username: { type: 'string' },
           ciphertext:          { type: 'string' },
           encapsulated_key:    { type: 'string' },
-          nonce:               { type: 'string' }
+          nonce:               { type: 'string' },
+          sent_at_ms:          { type: 'integer', minimum: 0 }
         },
         additionalProperties: false
       }
     }
   }, async (req, reply) => {
     const userId = req.user.user_id
-    const { forward_to_username, ciphertext, encapsulated_key, nonce } = req.body
+    const { forward_to_username, ciphertext, encapsulated_key, nonce, sent_at_ms } = req.body
 
     // fetch original message
     const { rows: origRows } = await pool.query(
@@ -284,10 +288,10 @@ export default async function messageRoutes(app) {
       const { rows: msgRows } = await client.query(
         `INSERT INTO messages
            (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key, nonce,
-            is_forwarded, original_message_id)
-         VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7)
-         RETURNING id, sent_at`,
-        [conversationId, userId, targetId, ciphertext, encapsulated_key, nonce, req.params.id]
+            sent_at_ms, is_forwarded, original_message_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8)
+         RETURNING id, sent_at, sent_at_ms`,
+        [conversationId, userId, targetId, ciphertext, encapsulated_key, nonce, sent_at_ms, req.params.id]
       )
       const forwarded = msgRows[0]
 
@@ -306,6 +310,7 @@ export default async function messageRoutes(app) {
       return reply.code(201).send({
         message_id:          forwarded.id,
         forwarded_at:        forwarded.sent_at,
+        sent_at_ms:          forwarded.sent_at_ms,
         original_message_id: req.params.id
       })
     } catch (err) {
