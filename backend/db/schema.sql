@@ -47,7 +47,6 @@ CREATE TABLE IF NOT EXISTS messages (
     recipient_id          UUID NOT NULL REFERENCES users(id),
     ciphertext            TEXT NOT NULL,
     encapsulated_key      TEXT NOT NULL,
-    nonce                 TEXT NOT NULL,
     sent_at_ms            BIGINT NOT NULL,
     sent_at               TIMESTAMPTZ DEFAULT NOW(),
     read_at               TIMESTAMPTZ DEFAULT NULL,

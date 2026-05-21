@@ -71,8 +71,8 @@ CREATE TABLE messages (
     recipient_id          UUID NOT NULL REFERENCES users(id),
     ciphertext            TEXT NOT NULL,
     encapsulated_key      TEXT NOT NULL,
-    nonce                 TEXT NOT NULL,
     sent_at               TIMESTAMPTZ DEFAULT NOW(),
+    sent_at_ms            BIGINT NOT NULL,
     read_at               TIMESTAMPTZ DEFAULT NULL,
     is_forwarded          BOOLEAN DEFAULT FALSE,
     original_message_id   UUID REFERENCES messages(id),
@@ -89,8 +89,8 @@ CREATE TABLE messages (
 | `recipient_id` | UUID | Foreign key → users |
 | `ciphertext` | TEXT | Base64url-encoded HPKE-encrypted payload |
 | `encapsulated_key` | TEXT | Base64url-encoded HPKE `enc` value |
-| `nonce` | TEXT | Base64url-encoded AES-GCM nonce (12 bytes) |
 | `sent_at` | TIMESTAMPTZ | Message send timestamp |
+| `sent_at_ms` | BIGINT | Client-supplied Unix timestamp (ms) — used as AEAD AAD; stored verbatim |
 | `read_at` | TIMESTAMPTZ | NULL until recipient opens the conversation |
 | `is_forwarded` | BOOLEAN | TRUE if this is a forwarded copy |
 | `original_message_id` | UUID | Points to the original message if forwarded, otherwise NULL |

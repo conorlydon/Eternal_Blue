@@ -10,7 +10,7 @@ struct Message {
     std::string recipient_id;
     std::string recipient_username;
 
-    std::vector<unsigned char> encapsulated_key;   // HPKE enc; "session_key" on the wire
+    std::vector<unsigned char> encapsulated_key;   // HPKE enc;
     std::vector<unsigned char> ciphertext;          // base64url on the wire
 
     long long   sent_at_ms = 0;

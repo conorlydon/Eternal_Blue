@@ -74,7 +74,6 @@ export default async function conversationRoutes(app) {
          ru.username AS recipient_username,
          m.ciphertext,
          m.encapsulated_key,
-         m.nonce,
          m.sent_at_ms,
          m.sent_at,
          m.read_at,

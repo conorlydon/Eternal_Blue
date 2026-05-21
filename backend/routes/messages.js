@@ -9,12 +9,11 @@ export default async function messageRoutes(app) {
     schema: {
       body: {
         type: 'object',
-        required: ['recipient_username', 'ciphertext', 'encapsulated_key', 'nonce', 'sent_at_ms'],
+        required: ['recipient_username', 'ciphertext', 'encapsulated_key', 'sent_at_ms'],
         properties: {
           recipient_username: { type: 'string' },
           ciphertext:         { type: 'string' },
           encapsulated_key:   { type: 'string' },
-          nonce:              { type: 'string' },
           sent_at_ms:         { type: 'integer', minimum: 0 }
         },
         additionalProperties: false
@@ -22,7 +21,7 @@ export default async function messageRoutes(app) {
     }
   }, async (req, reply) => {
     const senderId = req.user.user_id
-    const { recipient_username, ciphertext, encapsulated_key, nonce, sent_at_ms } = req.body
+    const { recipient_username, ciphertext, encapsulated_key, sent_at_ms } = req.body
 
     // look up recipient
     const { rows: recipientRows } = await pool.query(
@@ -61,10 +60,10 @@ export default async function messageRoutes(app) {
 
       const { rows: msgRows } = await client.query(
         `INSERT INTO messages
-           (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key, nonce, sent_at_ms)
+           (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key, sent_at_ms)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, sent_at, sent_at_ms`,
-        [conversationId, senderId, recipientId, ciphertext, encapsulated_key, nonce, sent_at_ms]
+        [conversationId, senderId, recipientId, ciphertext, encapsulated_key, sent_at_ms]
       )
       const message = msgRows[0]
 
@@ -126,7 +125,6 @@ export default async function messageRoutes(app) {
          ru.username AS recipient_username,
          m.ciphertext,
          m.encapsulated_key,
-         m.nonce,
          m.sent_at_ms,
          m.sent_at,
          m.is_forwarded,
@@ -159,7 +157,6 @@ export default async function messageRoutes(app) {
          ru.username AS recipient_username,
          m.ciphertext,
          m.encapsulated_key,
-         m.nonce,
          m.sent_at_ms,
          m.sent_at,
          m.read_at,
@@ -223,12 +220,11 @@ export default async function messageRoutes(app) {
     schema: {
       body: {
         type: 'object',
-        required: ['forward_to_username', 'ciphertext', 'encapsulated_key', 'nonce', 'sent_at_ms'],
+        required: ['forward_to_username', 'ciphertext', 'encapsulated_key', 'sent_at_ms'],
         properties: {
           forward_to_username: { type: 'string' },
           ciphertext:          { type: 'string' },
           encapsulated_key:    { type: 'string' },
-          nonce:               { type: 'string' },
           sent_at_ms:          { type: 'integer', minimum: 0 }
         },
         additionalProperties: false
@@ -236,7 +232,7 @@ export default async function messageRoutes(app) {
     }
   }, async (req, reply) => {
     const userId = req.user.user_id
-    const { forward_to_username, ciphertext, encapsulated_key, nonce, sent_at_ms } = req.body
+    const { forward_to_username, ciphertext, encapsulated_key, sent_at_ms } = req.body
 
     // fetch original message
     const { rows: origRows } = await pool.query(
@@ -287,11 +283,11 @@ export default async function messageRoutes(app) {
 
       const { rows: msgRows } = await client.query(
         `INSERT INTO messages
-           (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key, nonce,
+           (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key,
             sent_at_ms, is_forwarded, original_message_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8)
          RETURNING id, sent_at, sent_at_ms`,
-        [conversationId, userId, targetId, ciphertext, encapsulated_key, nonce, sent_at_ms, req.params.id]
+        [conversationId, userId, targetId, ciphertext, encapsulated_key, sent_at_ms, req.params.id]
       )
       const forwarded = msgRows[0]
 
