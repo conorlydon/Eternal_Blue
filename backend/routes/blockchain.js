@@ -11,6 +11,7 @@ export default async function blockchainRoutes(app) {
     const { rows } = await pool.query(
       `SELECT
          dq.message_id,
+         dq.digest,
          dq.batch_id,
          br.batch_hash,
          br.tx_hash,
@@ -38,12 +39,13 @@ export default async function blockchainRoutes(app) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'No on-chain record yet' })
     }
     return reply.send({
-      message_id:  r.message_id,
-      batch_hash:  r.batch_hash,
-      tx_hash:     r.tx_hash,
+      message_id:   r.message_id,
+      digest:       r.digest,
+      batch_hash:   r.batch_hash,
+      tx_hash:      r.tx_hash,
       block_number: r.block_number,
-      recorded_at: r.recorded_at,
-      sepolia_url: `https://sepolia.etherscan.io/tx/${r.tx_hash}`
+      recorded_at:  r.recorded_at,
+      sepolia_url:  `https://sepolia.etherscan.io/tx/${r.tx_hash}`
     })
   })
 }
