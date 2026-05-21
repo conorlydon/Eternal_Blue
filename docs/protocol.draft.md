@@ -173,15 +173,19 @@ The user's long-term X25519 private key is held in plaintext in memory only betw
 ```
 struct {
   uint8_t  magic[4]     = "EBKS";          // "Eternal Blue Keystore"
-  uint8_t  version      = 1;
+  uint8_t  version      = 1;                // governs the Argon2id params (see below)
   uint8_t  argon2_salt[16];                // random per install
-  uint32_t argon2_m_kib  = 262144;         // 256 MiB
-  uint32_t argon2_t      = 4;
-  uint32_t argon2_p      = 1;
   uint8_t  xchacha_nonce[24];              // random per wrap
   uint8_t  ciphertext[32 + 16];            // wrapped sk + Poly1305 tag
 }
 ```
+
+The Argon2id parameters are **not stored in the file** — they are fixed by the
+file `version`. Version 1 means `t=4, m=256 MiB, p=1`. Raising the cost later
+means bumping the version byte and branching on it during `load`, so old files
+remain readable. (Storing per-file params would make the keystore self-describing
+like a PHC string; we chose version-governed params for simplicity, since a single
+client controls both the writer and the reader.)
 
 ### Procedure
 
@@ -238,22 +242,16 @@ The database file is not encrypted at rest. This is consistent with the threat m
 
 ## 9. Blockchain integrity (Sepolia digest)
 
-A Solidity contract on Ethereum Sepolia records keccak256 digests of message-batches with a block timestamp. The C++ client implements `verify <id>`, which:
+Tamper-evident integrity is recorded **server-side** and verified through a **standalone web page** — it is not part of the C++ client (CONTEXT.md blockchain req 3: "accessible independently of the messaging application").
 
-1. Reads the local row for `message_id`, retrieves `chain_tx_hash` and the canonical bytes whose digest was published.
-2. Computes `keccak256(canonical_bytes)` locally (single-file keccak implementation — libsodium does not ship it).
-3. Opens a fresh `TlsConnection` to the Sepolia JSON-RPC endpoint, issues `eth_getTransactionReceipt` for `chain_tx_hash`, parses the logs/inputs to extract the on-chain digest.
-4. Compares byte-for-byte. Prints PASS with the block timestamp on match, FAIL with both digests on mismatch.
+- A server-side digest-service computes `keccak256` over stored message ciphertext, batches the digests, and writes the batch hash to a Solidity contract on Ethereum Sepolia alongside the block timestamp. The transaction hash is recorded in `blockchain_records`.
+- A standalone verification web page lets anyone fetch the on-chain hash + timestamp for a transaction, recompute the digest from the supplied content, and see a pass/fail result.
 
-**Canonical bytes.** For a single-message commit:
-```
-canonical = message_id_bytes(16) || session_key(32) || ciphertext(var)
-```
-For a batched commit (the production mode, to amortize gas), the on-chain digest is the keccak256 of a sorted, length-prefixed concatenation of per-message digests — the Merkle-root variant is deferred until the batch contract is finalized.
+The C++ client's only relationship to this is indirect: it produces the ciphertext the digest-service later hashes. It does not compute keccak256, talk to Sepolia, or implement a `verify` command.
 
-**What this defends against.** A server that deletes or substitutes ciphertext from its own database, and the recipient's local cache has also been wiped or tampered with. The chain is the third independent witness; rewriting it requires reorging Sepolia, which is infeasible for an attacker bounded by ordinary economic resources.
+**What this defends against.** A server that deletes or substitutes ciphertext from its database — the chain is an independent witness whose rewriting requires reorging Sepolia, infeasible for an economically-bounded attacker.
 
-**What this does not defend against.** A server that simply never published the digest (the client surfaces "no on-chain record yet" but cannot distinguish "not yet batched" from "withheld"). And the client must trust its own copy of the contract address; if a compromised server serves a fake contract address at install time, verify becomes meaningless. The contract address is pinned in the binary, not fetched from the server.
+**What this does not defend against.** A server that never published a digest (cannot distinguish "not yet batched" from "withheld"). And verification trusts the contract address configured in the web page, not the app server.
 
 ---
 

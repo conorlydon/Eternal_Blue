@@ -36,10 +36,11 @@ FetchContent_MakeAvailable(doctest)
 # --- core object library (shared between main and tests) ---
 
 add_library(eternal-blue-core OBJECT
-    src/TlsConnection.cpp 
-    src/HttpClient.cpp 
-    src/CryptoContext.cpp 
-    src/Keystore.cpp 
+    src/TlsConnection.cpp
+    src/HttpClient.cpp
+    src/CryptoContext.cpp
+    src/Base64.cpp
+    src/Keystore.cpp
     src/TrustStore.cpp 
     src/LocalStore.cpp 
     src/User.cpp 
