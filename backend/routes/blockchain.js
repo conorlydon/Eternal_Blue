@@ -3,9 +3,7 @@ import pool from '../db/index.js'
 export default async function blockchainRoutes(app) {
 
   // GET /api/blockchain/digest/:message_id
-  app.get('/blockchain/digest/:message_id', {
-    onRequest: [app.authenticate]
-  }, async (req, reply) => {
+  app.get('/blockchain/digest/:message_id', async (req, reply) => {
     const { message_id } = req.params
 
     const { rows } = await pool.query(
@@ -16,11 +14,8 @@ export default async function blockchainRoutes(app) {
          br.batch_hash,
          br.tx_hash,
          br.block_number,
-         br.recorded_at,
-         m.sender_id,
-         m.recipient_id
+         br.recorded_at
        FROM digest_queue dq
-       JOIN messages m ON m.id = dq.message_id
        LEFT JOIN blockchain_records br ON br.batch_id = dq.batch_id
        WHERE dq.message_id = $1`,
       [message_id]
@@ -31,10 +26,6 @@ export default async function blockchainRoutes(app) {
     }
 
     const r = rows[0]
-    if (r.sender_id !== req.user.user_id && r.recipient_id !== req.user.user_id) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: 'Not your message' })
-    }
-
     if (r.batch_id === null) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'No on-chain record yet' })
     }
