@@ -61,7 +61,7 @@ export default async function messageRoutes(app) {
       const { rows: msgRows } = await client.query(
         `INSERT INTO messages
            (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key, sent_at_ms)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, sent_at, sent_at_ms`,
         [conversationId, senderId, recipientId, ciphertext, encapsulated_key, sent_at_ms]
       )
@@ -285,7 +285,7 @@ export default async function messageRoutes(app) {
         `INSERT INTO messages
            (conversation_id, sender_id, recipient_id, ciphertext, encapsulated_key,
             sent_at_ms, is_forwarded, original_message_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8)
+         VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7)
          RETURNING id, sent_at, sent_at_ms`,
         [conversationId, userId, targetId, ciphertext, encapsulated_key, sent_at_ms, req.params.id]
       )
