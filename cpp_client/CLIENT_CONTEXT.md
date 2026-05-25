@@ -15,7 +15,7 @@ ctest --test-dir build                           # test
 
 ## Things every piece relies on
 
-- **base64url, no padding** is the wire encoding for every binary field (keys, ciphertext, nonces). Use `Base64.hpp` (`to_base64url` / `from_base64url`) — don't hand-roll it. It wraps libsodium's `VARIANT_URLSAFE_NO_PADDING`.
+- **base64url, no padding** is the wire encoding for every binary field (keys, ciphertext). Use `Base64.hpp` (`to_base64url` / `from_base64url`) — don't hand-roll it. It wraps libsodium's `VARIANT_URLSAFE_NO_PADDING`.
 - **Typed exceptions**: each subsystem throws its own (`TlsError`, `HttpError`, `CryptoError`, `KeystoreError`, `LocalStoreError`). Throw the matching one; `main` catches `std::exception` centrally.
 - **Comment style**: concise, lowercase, only where the *why* isn't obvious. No capitalized full-sentence comments.
 - **Crypto is already done** in `CryptoContext` (keypairs, KEK, wrap/unwrap). You don't touch crypto — you model data and move bytes.
@@ -37,9 +37,8 @@ ctest --test-dir build                           # test
 ### `Message` (`Message.hpp` → `src/Message.cpp`)
 - **Does**: models a message in wire + storage form; serializes to/from JSON. No crypto.
 - **Implement**:
-  - `to_send_json()` → JSON body for `POST /api/messages`: `recipient_username`, `ciphertext` (base64url), `session_key` (base64url of `encapsulated_key`), `nonce` (base64url of **12 zero bytes** — required by the backend schema but unused under HPKE, see protocol §4), `sent_at_ms`.
-  - `from_json()` → parse a message object from a GET response; base64url-decode `ciphertext` and `session_key` into the byte vectors.
-- **Field-name mapping gotcha**: the struct field is `encapsulated_key`, but on the wire it's called `session_key` (API.md). Map accordingly.
+  - `to_send_json()` → JSON body for `POST /api/messages`: `recipient_username`, `encapsulated_key` (base64url), `ciphertext` (base64url), `sent_at_ms`.
+  - `from_json()` → parse a message object from a GET response; base64url-decode `encapsulated_key` and `ciphertext` into the byte vectors.
 - **Depends on**: nlohmann/json, `Base64.hpp`.
 
 ### `LocalStore` (`LocalStore.hpp` → `src/LocalStore.cpp`)
