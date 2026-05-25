@@ -2,6 +2,7 @@
 #include "Keystore.hpp"
 #include "CryptoContext.hpp"
 #include "LocalStore.hpp"
+#include "TrustStore.hpp"
 
 #include <cstdio>
 #include <fstream>
@@ -166,6 +167,75 @@ TEST_CASE("localstore get_pin returns nullopt for unknown username") {
     CHECK_FALSE(db.get_pin("nobody").has_value());
 
     std::remove(kDbTmp.c_str());
+}
+
+TEST_CASE("truststore pins on first contact") {
+    std::remove(kDbTmp.c_str());
+    LocalStore db(kDbTmp);
+    TrustStore ts(db);
+    CryptoContext cx;
+
+    User alice;
+    alice.username    = "alice";
+    alice.user_id     = "alice-uuid";
+    alice.public_key  = cx.generate_keypair().public_key;
+    alice.key_version = 1;
+
+    User out = ts.lookup_or_pin(alice);
+    CHECK(out.public_key == alice.public_key);
+
+    auto stored = db.get_pin("alice");
+    REQUIRE(stored.has_value());
+    CHECK(stored->public_key == alice.public_key);
+
+    std::remove(kDbTmp.c_str());
+}
+
+TEST_CASE("truststore accepts a matching key on a later lookup") {
+    std::remove(kDbTmp.c_str());
+    LocalStore db(kDbTmp);
+    TrustStore ts(db);
+    CryptoContext cx;
+
+    User alice;
+    alice.username    = "alice";
+    alice.user_id     = "alice-uuid";
+    alice.public_key  = cx.generate_keypair().public_key;
+    alice.key_version = 1;
+
+    ts.lookup_or_pin(alice);
+    User again = ts.lookup_or_pin(alice);
+    CHECK(again.public_key == alice.public_key);
+
+    std::remove(kDbTmp.c_str());
+}
+
+TEST_CASE("truststore throws when the server hands a different key") {
+    std::remove(kDbTmp.c_str());
+    LocalStore db(kDbTmp);
+    TrustStore ts(db);
+    CryptoContext cx;
+
+    User real;
+    real.username    = "alice";
+    real.user_id     = "alice-uuid";
+    real.public_key  = cx.generate_keypair().public_key;
+    real.key_version = 1;
+    ts.lookup_or_pin(real);
+
+    User fake = real;
+    fake.public_key = cx.generate_keypair().public_key;
+    CHECK_THROWS_AS(ts.lookup_or_pin(fake), KeyChangedError);
+
+    std::remove(kDbTmp.c_str());
+}
+
+TEST_CASE("truststore fingerprint is deterministic and key-dependent") {
+    CryptoContext cx;
+    KeyPair a = cx.generate_keypair();
+    KeyPair b = cx.generate_keypair();
+    CHECK(TrustStore::fingerprint(a.public_key) == TrustStore::fingerprint(a.public_key));
+    CHECK(TrustStore::fingerprint(a.public_key) != TrustStore::fingerprint(b.public_key));
 }
 
 TEST_CASE("localstore save_pin overwrites existing pin") {
