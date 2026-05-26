@@ -1,6 +1,6 @@
     # Eternal-Blue API Reference
 
-**Base URL:** `https://eternalblue.theburkenator.com/api`  
+**Base URL:** `https://eternal-blue.theburkenator.com/api`  
 **During development:** `http://200.69.13.70:3000/api`  
 **Content-Type:** `application/json` on all requests and responses  
 **Auth:** All endpoints marked 🔒 require `Authorization: Bearer <token>` header

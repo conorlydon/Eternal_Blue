@@ -1,0 +1,83 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Page-1" id="qvbiQloYKVcrvGkn8ewR">
+    <mxGraphModel dx="1250" dy="705" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="240" width="490" x="180" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-10" edge="1" parent="1" source="-Apabh2dxtDwfG9K8eMk-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" target="-Apabh2dxtDwfG9K8eMk-15">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="300" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="C++ Client&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;TlsConnection.cpp&lt;/div&gt;&lt;div&gt;(raw socket + OpenSSL)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="120" width="180" x="210" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-3" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="&lt;b&gt;&lt;font style=&quot;font-size: 15px;&quot;&gt;CLIENT MACHINES&lt;/font&gt;&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="160" x="345" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-9" edge="1" parent="1" source="-Apabh2dxtDwfG9K8eMk-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" target="-Apabh2dxtDwfG9K8eMk-15">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="545" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Browser (Verification)&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;frontend/verification/index.html&lt;/div&gt;&lt;div&gt;(ether.js via CDN)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="120" width="190" x="450" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-7" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="HTTPS" vertex="1">
+          <mxGeometry height="30" width="60" x="550" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-11" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="TLS 1.3+&lt;div&gt;(cert verified, SNI, hostname check)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="120" x="190" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-32" edge="1" parent="1" source="-Apabh2dxtDwfG9K8eMk-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="-Apabh2dxtDwfG9K8eMk-30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-12" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="400" width="530" x="140" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-14" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;&lt;b&gt;VM: eternalblue.theburken&lt;/b&gt;&lt;/font&gt;&lt;b style=&quot;font-size: 14px; background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;ator.com&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="260" x="295.5" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-16" edge="1" parent="1" source="-Apabh2dxtDwfG9K8eMk-15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="-Apabh2dxtDwfG9K8eMk-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-15" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="nginx (TLS termination)&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;TLS cert from Let&#39;s Encrypt / CA&lt;/div&gt;" vertex="1">
+          <mxGeometry height="80" width="196" x="327" y="360" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-17" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="plain HTTP (localhost)" vertex="1">
+          <mxGeometry height="30" width="60" x="440" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-24" edge="1" parent="1" source="-Apabh2dxtDwfG9K8eMk-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" target="-Apabh2dxtDwfG9K8eMk-23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-28" edge="1" parent="1" source="-Apabh2dxtDwfG9K8eMk-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" target="-Apabh2dxtDwfG9K8eMk-27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-18" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="&lt;font style=&quot;font-size: 14px;&quot;&gt;Node.js / Fastify (server.js)&lt;/font&gt;&lt;div&gt;&lt;span style=&quot;font-size: 14px; background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;font-size: 14px; background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;/api/auth/*&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; /api/keys/*&amp;nbsp; &amp;nbsp; /api/messages/*&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;font style=&quot;font-size: 14px;&quot;&gt;/api/conversations/*&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; /api/blockchain/*&lt;/font&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="375" x="238" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-23" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="PostgreSQL&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;users&lt;/div&gt;&lt;div&gt;messages&lt;/div&gt;&lt;div&gt;conversations&lt;/div&gt;&lt;div&gt;digest_queue&lt;/div&gt;&lt;div&gt;blockchain_records&lt;/div&gt;" vertex="1">
+          <mxGeometry height="170" width="120" x="160" y="730" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-26" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="TCP (localhost)" vertex="1">
+          <mxGeometry height="30" width="110" x="330" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-27" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Digest Service (digest-service/)&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;polls digest_queue every 10 min&lt;/div&gt;&lt;div&gt;batches -&amp;gt; keccak256 -&amp;gt; tx&lt;/div&gt;" vertex="1">
+          <mxGeometry height="110" width="264" x="366" y="790" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-29" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;autosize=1;resizable=0;" value="Serves static" vertex="1">
+          <mxGeometry height="30" width="90" x="520" y="700" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-30" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Ethernium Sepolia Testnet&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;MessageDigest.sol&lt;/div&gt;" vertex="1">
+          <mxGeometry height="80" width="145" x="353" y="990" as="geometry" />
+        </mxCell>
+        <mxCell id="-Apabh2dxtDwfG9K8eMk-33" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="HTTPS JSON-RPC" vertex="1">
+          <mxGeometry height="30" width="120" x="430" y="940" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
