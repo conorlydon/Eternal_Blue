@@ -228,21 +228,13 @@
   </div>
 
   <script type="module">
-    async function sha256hex(str) {
-      const buf = await crypto.subtle.digest(
-        'SHA-256',
-        new TextEncoder().encode(str)
-      )
-      return '0x' + Array.from(new Uint8Array(buf))
-        .map(b => b.toString(16).padStart(2, '0')).join('')
-    }
+    const API_BASE = 'https://eternalblue.theburkenator.com'
 
-    async function keccak256(input) {
-      const { ethers } = await import('https://esm.sh/ethers@6')
-      if (input instanceof Uint8Array) {
-        return ethers.keccak256(input)
-      }
-      return ethers.keccak256(ethers.toUtf8Bytes(input))
+    // decode base64 or base64url (no padding required) to Uint8Array
+    function decodeBase64(str) {
+      const b64 = str.replace(/-/g, '+').replace(/_/g, '/')
+      const padded = b64 + '='.repeat((4 - b64.length % 4) % 4)
+      return Uint8Array.from(atob(padded), c => c.charCodeAt(0))
     }
 
     window.verify = async function () {
@@ -267,16 +259,17 @@
 
       try {
         // 1. fetch the on-chain record from the API
-        const res  = await fetch(`/api/blockchain/digest/${messageId}`)
+        const res  = await fetch(`${API_BASE}/api/blockchain/digest/${messageId}`)
         const data = await res.json()
 
         if (!res.ok) {
           throw new Error(data.message || 'Failed to fetch on-chain record')
         }
 
-        // 2. recompute the digest of the ciphertext locally
+        // 2. recompute keccak256 of the raw ciphertext bytes
+        //    ciphertext may be base64url (wire format) or standard base64 — decodeBase64 handles both
         const { ethers } = await import('https://esm.sh/ethers@6')
-        const bytes          = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0))
+        const bytes          = decodeBase64(ciphertext)
         const computedDigest = ethers.keccak256(bytes)
 
         // 3. compare against recorded digest
