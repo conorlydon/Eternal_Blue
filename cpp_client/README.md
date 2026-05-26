@@ -49,6 +49,9 @@ nothing authenticated is persisted. `health` also works as a one-shot:
 | `signup <username>` | create an account on this machine (generates + wraps a keypair, publishes the public key) |
 | `login <username>` | authenticate and unlock the local key |
 | `logout` | end the session, wipe the key from memory |
+| `send <username> <text...>` | encrypt with HPKE Mode_Auth for the recipient (TOFU-pinned) and post the ciphertext |
+| `inbox` | fetch new ciphertexts, decrypt, save locally, list `[id] from <sender> <time>` per new message |
+| `read <message_id>` | print the plaintext of a locally-stored message |
 | `health` | check server reachability |
 | `help` | list commands |
 | `quit` | exit (also wipes the key) |
@@ -62,14 +65,31 @@ password:
 registered alice
 > login alice
 password:
-logged in as alice (token expires 2026-05-22T15:27:34Z)
-alice> logout
-logged out alice
-> quit
+logged in as alice (token expires …)
+alice> send bob the quick brown fox jumps over the lazy dog
+sent to bob [c9bf9e57-…]
+alice> quit
 ```
 
-The wrapped private key is stored at `~/.eternal-messenger/keys.bin` (one user
-per machine — see Notes).
+```
+> login bob
+password:
+logged in as bob (token expires …)
+bob> inbox
+  [c9bf9e57-…] from alice 2026-05-25T15:48Z
+inbox: 1 new, 0 skipped
+bob> read c9bf9e57-…
+from alice 2026-05-25T15:48Z [signed]
+the quick brown fox jumps over the lazy dog
+```
+
+`inbox` only lists metadata; `read` is where plaintext appears. Sender keys are
+fetched via `/api/keys/:username` and run through TOFU (`TrustStore`) — first
+contact pins, subsequent lookups must match or the operation aborts.
+
+The wrapped private key is stored at `~/.eternal-messenger/keys.bin` and the
+local message + pin database at `~/.eternal-messenger/store.db` (one user per
+machine — see Notes).
 
 ### Notes
 

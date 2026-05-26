@@ -2,11 +2,14 @@
 #include "HttpClient.hpp"
 #include "CryptoContext.hpp"
 #include "Keystore.hpp"
+#include "LocalStore.hpp"
+#include "TrustStore.hpp"
 #include <string>
 #include <string_view>
 
-// top-level orchestrator: owns the http client, crypto, keystore, and the
-// in-memory session (token lives in http_, unwrapped secret key in session_sk_).
+// top-level orchestrator: owns the http client, crypto, keystore, sqlite store,
+// trust policy, and the in-memory session (token in http_, unwrapped secret key
+// in session_sk_).
 class Client {
 public:
     Client(std::string_view host, std::string_view port, std::string_view ca_bundle = "");
@@ -17,13 +20,23 @@ public:
     int login(std::string_view username, std::string_view password);
     int logout();
 
+    int send_message(std::string_view recipient_username, std::string_view plaintext);
+    int fetch_inbox();
+    int read_message(std::string_view message_id);
+
     bool logged_in() const { return logged_in_; }
     const std::string& current_username() const { return username_; }
 
 private:
+    // GET /api/keys/:username -> User::from_json -> TrustStore::lookup_or_pin.
+    // throws KeyChangedError on pin mismatch.
+    User lookup_user(const std::string& username);
+
     HttpClient    http_;
     CryptoContext crypto_;
     Keystore      keystore_;
+    LocalStore    store_;
+    TrustStore    trust_;
 
     bool        logged_in_ = false;
     std::string user_id_;

@@ -2,7 +2,10 @@ import pg from 'pg'
 import dotenv from 'dotenv'
 dotenv.config()
 
-const { Pool } = pg
+const { Pool, types } = pg
+
+// return BIGINT (oid 20) as a JS number — sent_at_ms fits well within Number.MAX_SAFE_INTEGER
+types.setTypeParser(20, (v) => parseInt(v, 10))
 
 const pool = new Pool({
   host:     process.env.DB_HOST,

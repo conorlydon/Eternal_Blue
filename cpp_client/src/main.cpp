@@ -39,12 +39,15 @@ std::string prompt_password(const std::string& prompt) {
 void print_help() {
     std::cout <<
         "commands:\n"
-        "  signup <username>   create an account on this machine\n"
-        "  login <username>    authenticate and unlock the local key\n"
-        "  logout              end the session, wipe the key\n"
-        "  health              check server reachability\n"
-        "  help                this message\n"
-        "  quit                exit\n";
+        "  signup <username>          create an account on this machine\n"
+        "  login <username>           authenticate and unlock the local key\n"
+        "  logout                     end the session, wipe the key\n"
+        "  send <username> <text...>  encrypt and send a message\n"
+        "  inbox                      fetch + decrypt incoming messages\n"
+        "  read <message_id>          print a stored message\n"
+        "  health                     check server reachability\n"
+        "  help                       this message\n"
+        "  quit                       exit\n";
 }
 
 void run_repl(Client& client) {
@@ -69,6 +72,23 @@ void run_repl(Client& client) {
                 if (cmd == "signup") client.signup(args[1], pw);
                 else                 client.login(args[1], pw);
                 sodium_memzero(pw.data(), pw.size());
+            }
+            else if (cmd == "send") {
+                if (args.size() < 3) { std::cerr << "usage: send <username> <text...>\n"; continue; }
+                std::string text;
+                for (size_t i = 2; i < args.size(); ++i) {
+                    if (i > 2) text += ' ';
+                    text += args[i];
+                }
+                client.send_message(args[1], text);
+            }
+            else if (cmd == "inbox") client.fetch_inbox();
+            else if (cmd == "read") {
+                if (args.size() < 2) { std::cerr << "usage: read <message_id>\n"; continue; }
+                std::string id = args[1];
+                if (!id.empty() && id.front() == '[') id.erase(0, 1);   // tolerate [id] copy-paste
+                if (!id.empty() && id.back()  == ']') id.pop_back();
+                client.read_message(id);
             }
             else std::cerr << "unknown command: " << cmd << " (try 'help')\n";
         } catch (const std::exception& e) {
