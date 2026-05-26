@@ -29,19 +29,15 @@ export async function onMessageSent(messageId, ciphertext) {
   console.log(`Queued digest for message ${messageId}`)
 }
 
-async function flushDigestBatch() {
-  const { rows } = await pool.query(
-    `SELECT id, message_id, digest
-     FROM digest_queue
-     WHERE batch_id IS NULL
-     ORDER BY queued_at ASC`
-  )
-  if (rows.length === 0) {
-    console.log('Digest queue empty — nothing to flush')
-    return
-  }
+async function flushWithRetry(rows, attempt = 1) {
+  const MAX_ATTEMPTS = 5
+  const BACKOFF_MS   = [0, 5000, 15000, 30000, 60000]
 
-  console.log(`Flushing ${rows.length} queued digest(s)...`)
+  if (attempt > 1) {
+    const delay = BACKOFF_MS[attempt - 1]
+    console.log(`Retry attempt ${attempt}/${MAX_ATTEMPTS} — waiting ${delay / 1000}s...`)
+    await new Promise(r => setTimeout(r, delay))
+  }
 
   try {
     const combined  = rows.map(r => r.digest).join('')
@@ -70,8 +66,28 @@ async function flushDigestBatch() {
     console.log(`Batch flushed: ${rows.length} messages → tx: ${tx.hash}`)
 
   } catch (err) {
-    console.error('Digest flush failed, will retry:', err.message)
+    console.error(`Flush attempt ${attempt} failed: ${err.message}`)
+    if (attempt < MAX_ATTEMPTS) {
+      return flushWithRetry(rows, attempt + 1)
+    }
+    console.error(`Flush failed after ${MAX_ATTEMPTS} attempts — batch will retry on next scheduled flush`)
   }
+}
+
+async function flushDigestBatch() {
+  const { rows } = await pool.query(
+    `SELECT id, message_id, digest
+     FROM digest_queue
+     WHERE batch_id IS NULL
+     ORDER BY queued_at ASC`
+  )
+  if (rows.length === 0) {
+    console.log('Digest queue empty — nothing to flush')
+    return
+  }
+
+  console.log(`Flushing ${rows.length} queued digest(s)...`)
+  await flushWithRetry(rows)
 }
 
 setInterval(flushDigestBatch, 10 * 60 * 1000)
