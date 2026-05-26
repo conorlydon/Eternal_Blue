@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import helmet from '@fastify/helmet'
+import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import dotenv from 'dotenv'
@@ -28,6 +29,13 @@ const app = Fastify({
       cert: fs.readFileSync(process.env.TLS_CERT),
     }
   })
+})
+
+// CORS — allow requests from any origin in dev; tighten in production if needed
+await app.register(cors, {
+  origin: process.env.CORS_ORIGIN || true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 })
 
 // security headers
