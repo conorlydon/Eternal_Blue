@@ -31,7 +31,18 @@ const app = Fastify({
 })
 
 // security headers
-await app.register(helmet)
+await app.register(helmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:    ["'self'"],
+      scriptSrc:     ["'self'", "'unsafe-inline'", "https://esm.sh"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      connectSrc:    ["'self'", "https://esm.sh"],
+      imgSrc:        ["'self'", "data:"],
+      styleSrc:      ["'self'", "'unsafe-inline'"],
+    }
+  }
+})
 
 // rate limiting
 await app.register(rateLimit, {

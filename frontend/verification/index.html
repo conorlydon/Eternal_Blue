@@ -182,7 +182,7 @@
     <label for="ciphertext">Ciphertext</label>
     <textarea id="ciphertext" placeholder="Paste the original base64-encoded ciphertext here"></textarea>
 
-    <button id="verify-btn" onclick="verify()">Verify message</button>
+    <button id="verify-btn">Verify message</button>
 
     <div class="error-msg" id="error-msg"></div>
     <div class="spinner" id="spinner">Checking on-chain record...</div>
@@ -237,7 +237,9 @@
       return Uint8Array.from(atob(padded), c => c.charCodeAt(0))
     }
 
-    window.verify = async function () {
+    document.getElementById('verify-btn').addEventListener('click', verify)
+
+    async function verify() {
       const messageId  = document.getElementById('message-id').value.trim()
       const ciphertext = document.getElementById('ciphertext').value.trim()
       const errorEl    = document.getElementById('error-msg')
