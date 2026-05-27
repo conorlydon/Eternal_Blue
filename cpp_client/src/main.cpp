@@ -57,13 +57,27 @@ void print_help() {
         "  <any text>                      send to the current peer\n"
         "  /sync                           pull new messages, append to thread\n"
         "  /list                           reprint the thread\n"
-        "  /delete <message_id>            delete a message from the thread\n"
-        "  /forward <message_id> <user>    forward a message to another user\n"
+        "  /delete <#>                     delete the Nth message in the printed thread\n"
+        "  /forward <#> <user>             forward the Nth message in the printed thread\n"
         "  /back  or  /quit                return to the top-level prompt\n";
 }
 
+// resolve a 1-based index string against the most recently printed thread.
+// returns the message_id, or empty on parse/range failure (with stderr message).
+std::string resolve_index(const std::vector<Message>& thread, const std::string& tok) {
+    int n = 0;
+    try { n = std::stoi(tok); }
+    catch (...) { std::cerr << "expected a number, got: " << tok << "\n"; return ""; }
+    if (n < 1 || static_cast<size_t>(n) > thread.size()) {
+        std::cerr << "index " << n << " out of range (thread has "
+                  << thread.size() << " messages)\n";
+        return "";
+    }
+    return thread[n - 1].message_id;
+}
+
 void run_chat(Client& client, const std::string& peer) {
-    client.print_thread(peer);
+    std::vector<Message> thread = client.print_thread(peer);   // cached for /delete and /forward
     std::string line;
     while (true) {
         std::cout << peer << "| " << std::flush;
@@ -75,21 +89,26 @@ void run_chat(Client& client, const std::string& peer) {
                 std::vector<std::string> args = split(line);
                 const std::string& sub = args[0];
                 if (sub == "/back" || sub == "/quit" || sub == "/exit") break;
-                else if (sub == "/sync") { client.sync(); client.print_thread(peer); }
-                else if (sub == "/list") client.print_thread(peer);
+                else if (sub == "/sync")  { client.sync(); thread = client.print_thread(peer); }
+                else if (sub == "/list")  { thread = client.print_thread(peer); }
                 else if (sub == "/delete") {
-                    if (args.size() < 2) { std::cerr << "usage: /delete <message_id>\n"; continue; }
-                    client.delete_message(args[1]);
-                    client.print_thread(peer);
+                    if (args.size() < 2) { std::cerr << "usage: /delete <#>\n"; continue; }
+                    std::string id = resolve_index(thread, args[1]);
+                    if (id.empty()) continue;
+                    client.delete_message(id);
+                    thread = client.print_thread(peer);
                 }
                 else if (sub == "/forward") {
-                    if (args.size() < 3) { std::cerr << "usage: /forward <message_id> <username>\n"; continue; }
-                    client.forward_message(args[1], args[2]);
+                    if (args.size() < 3) { std::cerr << "usage: /forward <#> <username>\n"; continue; }
+                    std::string id = resolve_index(thread, args[1]);
+                    if (id.empty()) continue;
+                    client.forward_message(id, args[2]);
                 }
                 else std::cerr << "unknown chat command: " << sub
                                << " (try /back, /sync, /list, /delete, /forward)\n";
             } else {
                 client.send_message(peer, line);
+                thread = client.print_thread(peer);   // refresh so the new outbound shows + indices stay current
             }
         } catch (const std::exception& e) {
             std::cerr << "error: " << e.what() << "\n";

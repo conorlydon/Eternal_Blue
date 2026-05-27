@@ -37,7 +37,9 @@ public:
     std::vector<ConvSummary> list_conversations();
     void                     print_conversations();
     std::vector<Message>     list_thread(const std::string& peer);
-    void                     print_thread(const std::string& peer);
+    // prints the thread with 1-based indices and returns it so the caller can
+    // map an index back to a message_id (used by chat-mode /delete and /forward)
+    std::vector<Message>     print_thread(const std::string& peer);
 
     bool logged_in() const { return logged_in_; }
     const std::string& current_username() const { return username_; }

@@ -373,14 +373,17 @@ std::vector<Message> Client::list_thread(const std::string& peer) {
     return thread;
 }
 
-void Client::print_thread(const std::string& peer) {
+std::vector<Message> Client::print_thread(const std::string& peer) {
     auto thread = list_thread(peer);
     std::cout << "── chat with " << peer << " ──\n";
-    if (thread.empty()) { std::cout << "(no messages yet)\n"; return; }
-    for (const auto& m : thread) {
+    if (thread.empty()) { std::cout << "(no messages yet)\n"; return thread; }
+    for (size_t i = 0; i < thread.size(); ++i) {
+        const Message& m = thread[i];
         const bool from_me = (m.sender_username == username_);
-        std::cout << "[" << (from_me ? std::string("you") : m.sender_username)
+        std::cout << (i + 1) << ". "
+                  << "[" << (from_me ? std::string("you") : m.sender_username)
                   << " " << ms_to_iso(m.sent_at_ms) << "] "
                   << m.plaintext << "\n";
     }
+    return thread;
 }
