@@ -16,12 +16,13 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- users
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    username        VARCHAR(32) UNIQUE NOT NULL,
-    password_hash   TEXT NOT NULL,
-    public_key      TEXT NOT NULL,
-    key_version     INTEGER DEFAULT 1,
-    created_at      TIMESTAMPTZ DEFAULT NOW()
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username                  VARCHAR(32) UNIQUE NOT NULL,
+    password_hash             TEXT NOT NULL,
+    public_key                TEXT NOT NULL,
+    key_version               INTEGER DEFAULT 1,
+    created_at                TIMESTAMPTZ DEFAULT NOW(),
+    encrypted_private_key     TEXT
 );
 
 -- ---------------------------------------------------------------------------

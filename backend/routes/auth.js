@@ -10,15 +10,16 @@ export default async function authRoutes(app) {
         type: 'object',
         required: ['username', 'password', 'public_key'],
         properties: {
-          username:   { type: 'string', minLength: 3, maxLength: 32, pattern: '^[a-zA-Z0-9_]+$' },
-          password:   { type: 'string', minLength: 12, maxLength: 128 },
-          public_key: { type: 'string', minLength: 43, maxLength: 44 }
+          username:              { type: 'string', minLength: 3, maxLength: 32, pattern: '^[a-zA-Z0-9_]+$' },
+          password:              { type: 'string', minLength: 12, maxLength: 128 },
+          public_key:            { type: 'string', minLength: 43, maxLength: 44 },
+          encrypted_private_key: { type: 'string', maxLength: 512 }
         },
         additionalProperties: false
       }
     }
   }, async (req, reply) => {
-    const { username, password, public_key } = req.body
+    const { username, password, public_key, encrypted_private_key } = req.body
     try {
       const hash = await argon2.hash(password, {
         type: argon2.argon2id,
@@ -27,10 +28,10 @@ export default async function authRoutes(app) {
         parallelism: 1
       })
       const { rows } = await pool.query(
-        `INSERT INTO users (username, password_hash, public_key)
-         VALUES ($1, $2, $3)
+        `INSERT INTO users (username, password_hash, public_key, encrypted_private_key)
+         VALUES ($1, $2, $3, $4)
          RETURNING id, username`,
-        [username, hash, public_key]
+        [username, hash, public_key, encrypted_private_key ?? null]
       )
       return reply.code(201).send({ user_id: rows[0].id, username: rows[0].username })
     } catch (err) {
@@ -77,8 +78,10 @@ export default async function authRoutes(app) {
     )
     return reply.send({
       token,
-      expires_at: new Date(Date.now() + 86400000).toISOString(),
-      user_id: user.id
+      expires_at:            new Date(Date.now() + 86400000).toISOString(),
+      user_id:               user.id,
+      public_key:            user.public_key,
+      encrypted_private_key: user.encrypted_private_key ?? null,
     })
   })
 
@@ -93,14 +96,15 @@ export default async function authRoutes(app) {
         type: 'object',
         required: ['current_password', 'new_password'],
         properties: {
-          current_password: { type: 'string', minLength: 1,  maxLength: 128 },
-          new_password:     { type: 'string', minLength: 12, maxLength: 128 }
+          current_password:      { type: 'string', minLength: 1,  maxLength: 128 },
+          new_password:          { type: 'string', minLength: 12, maxLength: 128 },
+          encrypted_private_key: { type: 'string', maxLength: 512 }
         },
         additionalProperties: false
       }
     }
   }, async (req, reply) => {
-    const { current_password, new_password } = req.body
+    const { current_password, new_password, encrypted_private_key } = req.body
     const { rows } = await pool.query(
       'SELECT id, password_hash FROM users WHERE id = $1',
       [req.user.user_id]
@@ -108,7 +112,7 @@ export default async function authRoutes(app) {
     const user = rows[0]
     const valid = await argon2.verify(user.password_hash, current_password)
     if (!valid) {
-      return reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Current password is incorrect' })
+      return reply.code(403).send({ error: 'FORBIDDEN', message: 'Current password is incorrect' })
     }
     if (current_password === new_password) {
       return reply.code(400).send({ error: 'INVALID_INPUT', message: 'New password must differ from current password' })
@@ -120,8 +124,8 @@ export default async function authRoutes(app) {
       parallelism: 1
     })
     await pool.query(
-      'UPDATE users SET password_hash = $1 WHERE id = $2',
-      [newHash, user.id]
+      'UPDATE users SET password_hash = $1, encrypted_private_key = COALESCE($2, encrypted_private_key) WHERE id = $3',
+      [newHash, encrypted_private_key ?? null, user.id]
     )
     return reply.send({ updated: true, updated_at: new Date().toISOString() })
   })

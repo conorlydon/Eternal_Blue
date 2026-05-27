@@ -151,7 +151,6 @@
     }
     .chat-name { font-size: 14px; font-weight: 600; }
     .chat-sub { font-size: 11px; color: #555; }
-    .chat-actions { margin-left: auto; display: flex; gap: 6px; }
 
     .messages-area {
       flex: 1; overflow-y: auto;
@@ -270,8 +269,8 @@
     <div class="auth-sub">End-to-end encrypted messaging</div>
 
     <div class="tabs">
-      <div class="tab active" id="tab-login" onclick="showTab('login')">Login</div>
-      <div class="tab" id="tab-register" onclick="showTab('register')">Register</div>
+      <div class="tab active" id="tab-login">Login</div>
+      <div class="tab" id="tab-register">Register</div>
     </div>
 
     <!-- Login form -->
@@ -281,7 +280,7 @@
       <input id="l-user" type="text" placeholder="your_username" autocomplete="username" />
       <label for="l-pass">Password</label>
       <input id="l-pass" type="password" placeholder="••••••••••••" autocomplete="current-password" />
-      <button class="btn" id="login-btn" onclick="doLogin()">Login</button>
+      <button class="btn" id="login-btn">Login</button>
     </div>
 
     <!-- Register form -->
@@ -292,7 +291,7 @@
       <label for="r-pass">Password</label>
       <input id="r-pass" type="password" placeholder="Min 12 characters" autocomplete="new-password" />
       <div class="form-hint">A new X25519 keypair will be generated and stored locally.</div>
-      <button class="btn" id="reg-btn" onclick="doRegister()">Create account</button>
+      <button class="btn" id="reg-btn">Create account</button>
     </div>
   </div>
 </div>
@@ -302,7 +301,8 @@
   <header class="app-header">
     <div class="app-logo">Eternal <span>Blue</span></div>
     <span class="header-user" id="header-user"></span>
-    <button class="btn-sm" onclick="doLogout()">Logout</button>
+    <button class="btn-sm" id="change-pass-btn">Change password</button>
+    <button class="btn-sm" id="logout-btn">Logout</button>
   </header>
 
   <div class="app-body">
@@ -310,7 +310,7 @@
     <div class="sidebar">
       <div class="sidebar-head">
         <span class="sidebar-title">Conversations</span>
-        <button class="btn-icon" title="New conversation" onclick="openNewConvModal()">+</button>
+        <button class="btn-icon" id="new-conv-btn" title="New conversation">+</button>
       </div>
       <div class="conv-list" id="conv-list">
         <div class="loading-row"><span class="spinner"></span> Loading…</div>
@@ -338,10 +338,8 @@
           <div class="compose-row">
             <textarea class="compose-input" id="compose-input"
               placeholder="Message (encrypted end-to-end)…"
-              rows="1"
-              onkeydown="handleComposeKey(event)"
-              oninput="autoResize(this)"></textarea>
-            <button class="btn-send" id="send-btn" onclick="doSend()" title="Send">&#10148;</button>
+              rows="1"></textarea>
+            <button class="btn-send" id="send-btn" title="Send">&#10148;</button>
           </div>
         </div>
       </div>
@@ -357,8 +355,8 @@
     <label for="new-conv-user">Recipient username</label>
     <input id="new-conv-user" type="text" placeholder="username" />
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="closeNewConvModal()">Cancel</button>
-      <button class="btn" onclick="startNewConv()">Start</button>
+      <button class="btn btn-ghost" id="cancel-new-conv-btn">Cancel</button>
+      <button class="btn" id="start-conv-btn">Start</button>
     </div>
   </div>
 </div>
@@ -371,8 +369,26 @@
     <label for="fwd-user">Forward to username</label>
     <input id="fwd-user" type="text" placeholder="username" />
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="closeForwardModal()">Cancel</button>
-      <button class="btn" onclick="doForward()">Forward</button>
+      <button class="btn btn-ghost" id="cancel-fwd-btn">Cancel</button>
+      <button class="btn" id="do-fwd-btn">Forward</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ CHANGE PASSWORD MODAL ══════════════════════════════════════════ -->
+<div class="overlay" id="change-pass-modal" hidden>
+  <div class="modal">
+    <div class="modal-title">Change password</div>
+    <div class="form-error" id="change-pass-err"></div>
+    <label for="cp-current">Current password</label>
+    <input id="cp-current" type="password" placeholder="Current password" autocomplete="current-password" />
+    <label for="cp-new">New password</label>
+    <input id="cp-new" type="password" placeholder="Min 12 characters" autocomplete="new-password" />
+    <label for="cp-confirm">Confirm new password</label>
+    <input id="cp-confirm" type="password" placeholder="Repeat new password" autocomplete="new-password" />
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="cancel-change-pass-btn">Cancel</button>
+      <button class="btn" id="do-change-pass-btn">Update password</button>
     </div>
   </div>
 </div>
@@ -380,680 +396,6 @@
 <!-- ════ TOAST ══════════════════════════════════════════════════════════ -->
 <div id="toast"></div>
 
-<!-- ════ SCRIPT ═════════════════════════════════════════════════════════ -->
-<script type="module">
-import { CipherSuite, DhkemX25519HkdfSha256, HkdfSha256 }
-  from 'https://esm.sh/@hpke/core@1.7.1'
-import { Chacha20Poly1305 }
-  from 'https://esm.sh/@hpke/chacha20poly1305@1.7.1'
-
-const API = 'https://eternal-blue.theburkenator.com/api'
-const HPKE_INFO = new TextEncoder().encode('eternal-blue-msg-v1')
-
-// ── App state ────────────────────────────────────────────────────────────
-const S = {
-  token: null, userId: null, username: null,
-  privateKey: null, publicKey: null,   // HPKE CryptoKey objects
-  suite: null,
-  currentConvId: null, currentPeer: null,
-  forwardTargetMsgId: null, forwardTargetPlaintext: null,
-}
-
-// ── HPKE suite (initialised once) ────────────────────────────────────────
-function makeSuite() {
-  return new CipherSuite({
-    kem:  new DhkemX25519HkdfSha256(),
-    kdf:  new HkdfSha256(),
-    aead: new Chacha20Poly1305(),
-  })
-}
-
-// ── Base64url helpers ─────────────────────────────────────────────────────
-function toB64u(buf) {
-  return btoa(String.fromCharCode(...new Uint8Array(buf)))
-    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'')
-}
-function fromB64u(str) {
-  const b64 = str.replace(/-/g,'+').replace(/_/g,'/')
-  const pad = b64 + '='.repeat((4 - b64.length % 4) % 4)
-  return Uint8Array.from(atob(pad), c => c.charCodeAt(0))
-}
-
-// ── PBKDF2 key wrapping (protect private key at rest) ────────────────────
-async function derivePbkdf2Key(password, salt) {
-  const raw = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
-  )
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' },
-    raw,
-    { name: 'AES-GCM', length: 256 },
-    false, ['encrypt', 'decrypt']
-  )
-}
-
-async function encryptPrivKey(privKeyBytes, password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const iv   = crypto.getRandomValues(new Uint8Array(12))
-  const key  = await derivePbkdf2Key(password, salt)
-  const ct   = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, privKeyBytes)
-  return { salt, iv, ct: new Uint8Array(ct) }
-}
-
-async function decryptPrivKey(salt, iv, ct, password) {
-  const key = await derivePbkdf2Key(password, salt)
-  const pt  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
-  return new Uint8Array(pt)
-}
-
-// ── Local key store ───────────────────────────────────────────────────────
-function saveKeyStore(username, pubBytes, wrapped) {
-  localStorage.setItem(`eb_key:${username}`, JSON.stringify({
-    pub: toB64u(pubBytes),
-    salt: toB64u(wrapped.salt),
-    iv:   toB64u(wrapped.iv),
-    ct:   toB64u(wrapped.ct),
-  }))
-}
-
-function loadKeyStore(username) {
-  const raw = localStorage.getItem(`eb_key:${username}`)
-  if (!raw) return null
-  const d = JSON.parse(raw)
-  return { pub: fromB64u(d.pub), salt: fromB64u(d.salt), iv: fromB64u(d.iv), ct: fromB64u(d.ct) }
-}
-
-// ── TOFU pinning ──────────────────────────────────────────────────────────
-function pinKey(username, pubBytes, keyVersion) {
-  const store = JSON.parse(localStorage.getItem('eb_tofu') || '{}')
-  store[username] = { pub: toB64u(pubBytes), kv: keyVersion, at: new Date().toISOString() }
-  localStorage.setItem('eb_tofu', JSON.stringify(store))
-}
-
-function getPinnedKey(username) {
-  const store = JSON.parse(localStorage.getItem('eb_tofu') || '{}')
-  const e = store[username]
-  if (!e) return null
-  return { pub: fromB64u(e.pub), kv: e.kv, at: e.at }
-}
-
-// Fetch + TOFU-check a peer's key. Returns { pubKey: CryptoKey, userId: string, warned: bool }
-async function fetchPeerKey(username) {
-  const data = await api('GET', `/keys/${username}`)
-  const newPubBytes = fromB64u(data.public_key)
-  const pinned = getPinnedKey(username)
-  let warned = false
-
-  if (pinned) {
-    if (toB64u(pinned.pub) !== toB64u(newPubBytes)) {
-      warned = true
-      // Still update pin — caller decides whether to abort
-    }
-  }
-  pinKey(username, newPubBytes, data.key_version)
-  const pubKey = await S.suite.kem.deserializePublicKey(newPubBytes)
-  return { pubKey, userId: data.user_id, warned }
-}
-
-// ── HPKE encrypt ──────────────────────────────────────────────────────────
-async function hpkeEncrypt(plaintext, recipientUsername) {
-  const { pubKey: recipPubKey, userId: recipId, warned } = await fetchPeerKey(recipientUsername)
-  const sentAtMs = Date.now()
-  const aad = new TextEncoder().encode(`${S.userId}|${recipId}|${sentAtMs}`)
-
-  const senderCtx = await S.suite.createSenderContext({
-    recipientPublicKey: recipPubKey,
-    senderKey: { publicKey: S.publicKey, privateKey: S.privateKey },
-    info: HPKE_INFO,
-  })
-  const ct  = await senderCtx.seal(new TextEncoder().encode(plaintext), aad)
-  const enc = senderCtx.enc
-
-  return {
-    recipientUsername,
-    recipientId:   recipId,
-    ciphertext:    toB64u(new Uint8Array(ct)),
-    encapsulated_key: toB64u(new Uint8Array(enc)),
-    sentAtMs,
-    warned,
-  }
-}
-
-// ── HPKE decrypt ──────────────────────────────────────────────────────────
-// Returns decrypted plaintext string, or throws
-async function hpkeDecrypt(msg) {
-  const enc   = fromB64u(msg.encapsulated_key)
-  const ct    = fromB64u(msg.ciphertext)
-  const sentAtMs = msg.sent_at_ms ?? Math.round(new Date(msg.sent_at).getTime())
-  const aad   = new TextEncoder().encode(`${msg.sender_id}|${msg.recipient_id}|${sentAtMs}`)
-
-  // Get sender's public key
-  let senderPubKey
-  if (msg.sender_username === S.username) {
-    senderPubKey = S.publicKey   // we're the sender; used only in auth check
-  } else {
-    const pinned = getPinnedKey(msg.sender_username)
-    if (pinned) {
-      senderPubKey = await S.suite.kem.deserializePublicKey(pinned.pub)
-    } else {
-      const { pubKey } = await fetchPeerKey(msg.sender_username)
-      senderPubKey = pubKey
-    }
-  }
-
-  const recipCtx = await S.suite.createRecipientContext({
-    recipientKey: { publicKey: S.publicKey, privateKey: S.privateKey },
-    enc,
-    senderPublicKey: senderPubKey,
-    info: HPKE_INFO,
-  })
-  const plain = await recipCtx.open(ct, aad)
-  return new TextDecoder().decode(plain)
-}
-
-// ── Sent message cache (so outbox messages can be displayed) ─────────────
-function cacheSentMsg(messageId, plaintext, recipientUsername) {
-  const store = JSON.parse(localStorage.getItem('eb_sent') || '{}')
-  store[messageId] = { t: plaintext, r: recipientUsername, ts: Date.now() }
-  localStorage.setItem('eb_sent', JSON.stringify(store))
-}
-
-function getCachedSentMsg(messageId) {
-  const store = JSON.parse(localStorage.getItem('eb_sent') || '{}')
-  return store[messageId] || null
-}
-
-// ── API helper ────────────────────────────────────────────────────────────
-async function api(method, path, body, auth = true) {
-  const headers = { 'Content-Type': 'application/json' }
-  if (auth && S.token) headers['Authorization'] = `Bearer ${S.token}`
-  const res  = await fetch(API + path, {
-    method, headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`)
-  return data
-}
-
-// ── Auth flows ────────────────────────────────────────────────────────────
-async function doLogin() {
-  const username = id('l-user').value.trim()
-  const password = id('l-pass').value
-  const errEl    = id('login-err')
-  const btn      = id('login-btn')
-  errEl.style.display = 'none'
-
-  if (!username || !password) return showErr(errEl, 'Please fill in all fields.')
-
-  btn.disabled = true; btn.textContent = 'Logging in…'
-  try {
-    const data = await api('POST', '/auth/login', { username, password }, false)
-    S.token    = data.token
-    S.userId   = data.user_id
-    S.username = username
-
-    // Unwrap local key
-    const ks = loadKeyStore(username)
-    if (!ks) throw new Error('No key found on this device. Please re-register or use the device where you registered.')
-    const privBytes = await decryptPrivKey(ks.salt, ks.iv, ks.ct, password)
-
-    S.suite      = makeSuite()
-    S.privateKey = await S.suite.kem.deserializePrivateKey(privBytes)
-    S.publicKey  = await S.suite.kem.deserializePublicKey(ks.pub)
-
-    // Pin own key
-    pinKey(username, ks.pub, 1)
-
-    showApp()
-  } catch (e) {
-    showErr(errEl, e.message)
-  } finally {
-    btn.disabled = false; btn.textContent = 'Login'
-  }
-}
-
-async function doRegister() {
-  const username = id('r-user').value.trim()
-  const password = id('r-pass').value
-  const errEl    = id('reg-err')
-  const btn      = id('reg-btn')
-  errEl.style.display = 'none'
-
-  if (!username || !password) return showErr(errEl, 'Please fill in all fields.')
-  if (!/^[a-zA-Z0-9_]{3,32}$/.test(username)) return showErr(errEl, 'Username: 3–32 chars, letters/numbers/_ only.')
-  if (password.length < 12) return showErr(errEl, 'Password must be at least 12 characters.')
-
-  btn.disabled = true; btn.textContent = 'Generating keys…'
-  try {
-    S.suite = makeSuite()
-
-    // Generate keypair
-    const kp        = await S.suite.generateKeyPair()
-    const pubBytes  = await S.suite.kem.serializePublicKey(kp.publicKey)
-    const privBytes = await S.suite.kem.serializePrivateKey(kp.privateKey)
-
-    // Wrap and persist private key BEFORE hitting the network
-    const wrapped = await encryptPrivKey(privBytes, password)
-    saveKeyStore(username, pubBytes, wrapped)
-
-    // Register
-    btn.textContent = 'Registering…'
-    await api('POST', '/auth/register', {
-      username,
-      password,
-      public_key: toB64u(pubBytes),
-    }, false)
-
-    // Auto-login
-    btn.textContent = 'Logging in…'
-    const loginData = await api('POST', '/auth/login', { username, password }, false)
-    S.token    = loginData.token
-    S.userId   = loginData.user_id
-    S.username = username
-    S.privateKey = kp.privateKey
-    S.publicKey  = kp.publicKey
-    pinKey(username, pubBytes, 1)
-
-    showApp()
-  } catch (e) {
-    showErr(errEl, e.message)
-  } finally {
-    btn.disabled = false; btn.textContent = 'Create account'
-  }
-}
-
-function doLogout() {
-  S.token = null; S.userId = null; S.username = null
-  S.privateKey = null; S.publicKey = null; S.suite = null
-  S.currentConvId = null; S.currentPeer = null
-  id('auth').style.display = 'flex'
-  id('app').style.display  = 'none'
-  id('l-user').value = ''; id('l-pass').value = ''
-  id('login-err').style.display = 'none'
-}
-
-// ── Show app + load conversations ─────────────────────────────────────────
-function showApp() {
-  id('auth').style.display = 'none'
-  id('app').style.display  = 'flex'
-  id('header-user').textContent = S.username
-  loadConversations()
-}
-
-async function loadConversations() {
-  const listEl = id('conv-list')
-  listEl.innerHTML = '<div class="loading-row"><span class="spinner"></span> Loading…</div>'
-  try {
-    const { conversations } = await api('GET', '/conversations')
-    renderConvList(conversations)
-  } catch (e) {
-    listEl.innerHTML = `<div class="loading-row" style="color:#f87171">${e.message}</div>`
-  }
-}
-
-function renderConvList(convs) {
-  const listEl = id('conv-list')
-  if (!convs.length) {
-    listEl.innerHTML = '<div class="loading-row" style="color:#555">No conversations yet</div>'
-    return
-  }
-  listEl.innerHTML = convs.map(c => {
-    const initial = c.with_username[0].toUpperCase()
-    const time    = c.last_message_at
-      ? relTime(new Date(c.last_message_at)) : ''
-    const unread  = c.unread_count > 0
-      ? `<span class="unread">${c.unread_count}</span>` : ''
-    const active  = c.conversation_id === S.currentConvId ? ' active' : ''
-    return `
-      <div class="conv-item${active}" data-id="${c.conversation_id}" data-peer="${c.with_username}"
-           onclick="openConv('${c.conversation_id}','${c.with_username}')">
-        <div class="avatar">${initial}</div>
-        <div class="conv-info">
-          <div class="conv-name">${esc(c.with_username)}</div>
-          <div class="conv-preview">End-to-end encrypted</div>
-        </div>
-        <div class="conv-right">
-          <span class="conv-time">${time}</span>
-          ${unread}
-        </div>
-      </div>`
-  }).join('')
-}
-
-// ── Open a conversation ───────────────────────────────────────────────────
-async function openConv(convId, peerUsername) {
-  S.currentConvId = convId
-  S.currentPeer   = peerUsername
-
-  // Update active state in sidebar
-  document.querySelectorAll('.conv-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.id === convId)
-  })
-
-  id('empty-state').style.display = 'none'
-  const chatView = id('chat-view')
-  chatView.style.display = 'flex'
-  id('chat-avatar').textContent = peerUsername[0].toUpperCase()
-  id('chat-name').textContent   = peerUsername
-
-  id('messages-area').innerHTML =
-    '<div class="loading-row"><span class="spinner"></span> Decrypting messages…</div>'
-
-  try {
-    const data = await api('GET', `/conversations/${convId}/messages?limit=50`)
-    // Mark as read
-    api('POST', `/conversations/${convId}/read`).catch(() => {})
-    // Refresh unread counts in sidebar
-    loadConversations()
-    renderMessages(data.messages, peerUsername)
-  } catch (e) {
-    id('messages-area').innerHTML =
-      `<div class="loading-row" style="color:#f87171">${esc(e.message)}</div>`
-  }
-}
-
-async function renderMessages(msgs, peerUsername) {
-  const area = id('messages-area')
-  if (!msgs.length) {
-    area.innerHTML = '<div class="loading-row" style="color:#555">No messages yet</div>'
-    return
-  }
-
-  area.innerHTML = '<div class="loading-row"><span class="spinner"></span> Decrypting…</div>'
-
-  const rendered = []
-  for (const msg of msgs) {
-    const mine = msg.sender_username === S.username
-    let plaintext
-
-    if (mine) {
-      // Try local cache
-      const cached = getCachedSentMsg(msg.message_id)
-      if (cached) {
-        plaintext = cached.t
-      } else {
-        plaintext = '[Sent from another device — ciphertext only]'
-      }
-    } else {
-      try {
-        plaintext = await hpkeDecrypt(msg)
-      } catch (e) {
-        plaintext = null
-      }
-    }
-
-    const fwdTag = msg.is_forwarded
-      ? `<div class="msg-forwarded-tag">↪ Forwarded</div>` : ''
-
-    const bubbleClass = plaintext === null ? 'error' : (mine ? 'mine' : 'theirs')
-    const displayText = plaintext === null
-      ? '[Decryption failed — key mismatch or tampered message]'
-      : esc(plaintext)
-
-    // Build action buttons
-    let actions = ''
-    if (plaintext !== null && !mine) {
-      // Received message: can forward
-      actions += `<button class="act-btn" onclick="openForwardModal('${msg.message_id}',${JSON.stringify(plaintext)})">Forward</button>`
-    }
-    if (msg.is_forwarded && mine) {
-      // Forwarded by us: can revoke
-      actions += `<button class="act-btn danger" onclick="doRevoke('${msg.message_id}')">Revoke</button>`
-    }
-    actions += `<button class="act-btn danger" onclick="doDelete('${msg.message_id}')">Delete</button>`
-
-    rendered.push(`
-      <div class="msg ${bubbleClass}" id="msg-${msg.message_id}">
-        ${fwdTag}
-        <div class="msg-bubble">${displayText}</div>
-        <div class="msg-meta">
-          <span>${fmtTime(new Date(msg.sent_at))}</span>
-          ${plaintext !== null && !mine ? '<span class="lock" title="Signature verified">🔒</span>' : ''}
-        </div>
-        <div class="msg-actions">${actions}</div>
-      </div>
-    `)
-  }
-
-  area.innerHTML = rendered.join('')
-  area.scrollTop = area.scrollHeight
-}
-
-// ── Send message ──────────────────────────────────────────────────────────
-async function doSend() {
-  const input = id('compose-input')
-  const text  = input.value.trim()
-  if (!text || !S.currentPeer) return
-
-  const btn = id('send-btn')
-  btn.disabled = true
-
-  try {
-    const encrypted = await hpkeEncrypt(text, S.currentPeer)
-
-    if (encrypted.warned) {
-      toast(`⚠ Key changed for ${S.currentPeer} — TOFU warning`, true)
-    }
-
-    const res = await api('POST', '/messages', {
-      recipient_username: encrypted.recipientUsername,
-      ciphertext:         encrypted.ciphertext,
-      encapsulated_key:   encrypted.encapsulated_key,
-      sent_at_ms:         encrypted.sentAtMs,
-    })
-
-    cacheSentMsg(res.message_id, text, S.currentPeer)
-    input.value = ''
-    input.style.height = ''
-
-    // Reload conversations (needed to resolve convId when starting a new thread)
-    const { conversations } = await api('GET', '/conversations')
-    renderConvList(conversations)
-
-    // Find the conversation with our current peer
-    if (!S.currentConvId) {
-      const conv = conversations.find(c => c.with_username === S.currentPeer)
-      if (conv) S.currentConvId = conv.conversation_id
-    }
-
-    if (S.currentConvId) await openConv(S.currentConvId, S.currentPeer)
-
-  } catch (e) {
-    toast(e.message, true)
-  } finally {
-    btn.disabled = false
-  }
-}
-
-// ── Delete message ────────────────────────────────────────────────────────
-async function doDelete(msgId) {
-  try {
-    await api('DELETE', `/messages/${msgId}`)
-    const el = document.getElementById(`msg-${msgId}`)
-    if (el) el.remove()
-    toast('Message deleted')
-  } catch (e) {
-    toast(e.message, true)
-  }
-}
-
-// ── Revoke forwarded message ──────────────────────────────────────────────
-async function doRevoke(msgId) {
-  try {
-    await api('DELETE', `/messages/${msgId}/revoke`)
-    toast('Access revoked')
-  } catch (e) {
-    toast(e.message, true)
-  }
-}
-
-// ── Forward message ───────────────────────────────────────────────────────
-function openForwardModal(msgId, plaintext) {
-  S.forwardTargetMsgId     = msgId
-  S.forwardTargetPlaintext = plaintext
-  id('fwd-user').value     = ''
-  id('fwd-err').style.display = 'none'
-  id('forward-modal').hidden = false
-}
-
-function closeForwardModal() {
-  id('forward-modal').hidden = true
-  S.forwardTargetMsgId     = null
-  S.forwardTargetPlaintext = null
-}
-
-async function doForward() {
-  const targetUser = id('fwd-user').value.trim()
-  const errEl      = id('fwd-err')
-  errEl.style.display = 'none'
-  if (!targetUser) return showErr(errEl, 'Enter a username.')
-
-  try {
-    const encrypted = await hpkeEncrypt(S.forwardTargetPlaintext, targetUser)
-    if (encrypted.warned) toast(`⚠ Key changed for ${targetUser}`, true)
-
-    await api('POST', `/messages/${S.forwardTargetMsgId}/forward`, {
-      forward_to_username: targetUser,
-      ciphertext:          encrypted.ciphertext,
-      encapsulated_key:    encrypted.encapsulated_key,
-      sent_at_ms:          encrypted.sentAtMs,
-    })
-
-    cacheSentMsg(`fwd-${Date.now()}`, S.forwardTargetPlaintext, targetUser)
-    closeForwardModal()
-    toast('Message forwarded')
-    loadConversations()
-  } catch (e) {
-    showErr(errEl, e.message)
-  }
-}
-
-// ── New conversation ──────────────────────────────────────────────────────
-function openNewConvModal() {
-  id('new-conv-user').value     = ''
-  id('new-conv-err').style.display = 'none'
-  id('new-conv-modal').hidden   = false
-}
-
-function closeNewConvModal() {
-  id('new-conv-modal').hidden = true
-}
-
-async function startNewConv() {
-  const username = id('new-conv-user').value.trim()
-  const errEl    = id('new-conv-err')
-  errEl.style.display = 'none'
-  if (!username) return showErr(errEl, 'Enter a username.')
-  if (username === S.username) return showErr(errEl, 'Cannot message yourself.')
-
-  try {
-    // Verify user exists and pin their key (TOFU)
-    const { warned } = await fetchPeerKey(username)
-    if (warned) toast('Key changed for ' + username + ' since last contact - TOFU warning', true)
-
-    closeNewConvModal()
-
-    // If a conversation with this user already exists in the sidebar, open it
-    const existing = document.querySelector('.conv-item[data-peer="' + username + '"]')
-    if (existing) {
-      openConv(existing.dataset.id, username)
-      return
-    }
-
-    // New thread - show compose view; convId resolves after first message is sent
-    S.currentConvId = null
-    S.currentPeer   = username
-
-    id('empty-state').style.display = 'none'
-    const chatView = id('chat-view')
-    chatView.style.display = 'flex'
-    id('chat-avatar').textContent = username[0].toUpperCase()
-    id('chat-name').textContent   = username
-    id('messages-area').innerHTML =
-      '<div class="loading-row" style="color:#555">Send a message to start this conversation.</div>'
-    id('compose-input').focus()
-
-  } catch (e) {
-    showErr(errEl, e.message)
-  }
-}
-
-
-// ── UI helpers ────────────────────────────────────────────────────────────
-function id(x) { return document.getElementById(x) }
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
-function showErr(el, msg) { el.textContent = msg; el.style.display = 'block' }
-
-let toastTimer
-function toast(msg, isErr = false) {
-  const el = id('toast')
-  el.textContent = msg
-  el.className = isErr ? 'err' : 'ok'
-  el.style.display = 'block'
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { el.style.display = 'none' }, 3000)
-}
-
-function relTime(d) {
-  const diff = Date.now() - d.getTime()
-  const min  = Math.floor(diff / 60000)
-  if (min < 1)   return 'just now'
-  if (min < 60)  return `${min}m ago`
-  const hr = Math.floor(min / 60)
-  if (hr < 24)   return `${hr}h ago`
-  return d.toLocaleDateString()
-}
-
-function fmtTime(d) {
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function autoResize(el) {
-  el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
-}
-
-function handleComposeKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    doSend()
-  }
-}
-
-// ── Tab switching ─────────────────────────────────────────────────────────
-function showTab(tab) {
-  id('form-login').style.display    = tab === 'login'    ? 'block' : 'none'
-  id('form-register').style.display = tab === 'register' ? 'block' : 'none'
-  id('tab-login').classList.toggle('active',    tab === 'login')
-  id('tab-register').classList.toggle('active', tab === 'register')
-}
-
-// Close modals on overlay click
-id('new-conv-modal').addEventListener('click', e => {
-  if (e.target === id('new-conv-modal')) closeNewConvModal()
-})
-id('forward-modal').addEventListener('click', e => {
-  if (e.target === id('forward-modal')) closeForwardModal()
-})
-
-// Enter key in auth forms
-id('l-pass').addEventListener('keydown', e => e.key === 'Enter' && doLogin())
-id('r-pass').addEventListener('keydown', e => e.key === 'Enter' && doRegister())
-id('new-conv-user').addEventListener('keydown', e => e.key === 'Enter' && startNewConv())
-id('fwd-user').addEventListener('keydown', e => e.key === 'Enter' && doForward())
-
-// Expose functions to onclick handlers
-Object.assign(window, {
-  showTab, doLogin, doRegister, doLogout,
-  openConv, doSend, doDelete, doRevoke,
-  openForwardModal, closeForwardModal, doForward,
-  openNewConvModal, closeNewConvModal, startNewConv,
-  handleComposeKey, autoResize,
-})
-
-// Expose fetchPeerKey for forward (called from openForwardModal context)
-window._fetchPeerKey = fetchPeerKey
-</script>
+<script type="module" src="/app/app.js"></script>
 </body>
 </html>

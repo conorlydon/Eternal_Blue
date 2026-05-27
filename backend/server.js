@@ -31,9 +31,9 @@ const app = Fastify({
   })
 })
 
-// CORS — allow requests from any origin in dev; tighten in production if needed
+// CORS — locked to the project domain; override via CORS_ORIGIN for local dev
 await app.register(cors, {
-  origin: process.env.CORS_ORIGIN || true,
+  origin: process.env.CORS_ORIGIN || 'https://eternal-blue.theburkenator.com',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 })
@@ -42,12 +42,13 @@ await app.register(cors, {
 await app.register(helmet, {
   contentSecurityPolicy: {
     directives: {
-      defaultSrc:    ["'self'"],
-      scriptSrc:     ["'self'", "'unsafe-inline'", "https://esm.sh"],
-      scriptSrcAttr: ["'unsafe-inline'"],
-      connectSrc:    ["'self'", "https://esm.sh"],
-      imgSrc:        ["'self'", "data:"],
-      styleSrc:      ["'self'", "'unsafe-inline'"],
+      defaultSrc: ["'self'"],
+      // app.js is served from 'self'; it imports from esm.sh — no unsafe-inline needed
+      scriptSrc:  ["'self'", "https://esm.sh", "https://cdn.esm.sh"],
+      // no scriptSrcAttr — zero inline event handlers in the HTML
+      connectSrc: ["'self'"],
+      imgSrc:     ["'self'", "data:"],
+      styleSrc:   ["'self'", "'unsafe-inline'"],
     }
   }
 })
