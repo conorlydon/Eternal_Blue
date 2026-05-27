@@ -26,6 +26,7 @@ public:
 
     HttpResponse get(std::string_view path);
     HttpResponse post(std::string_view path, std::string_view body);
+    HttpResponse del(std::string_view path);
 
     // empty token = no Authorization header
     void set_bearer_token(std::string_view token);

@@ -20,6 +20,10 @@ HttpResponse HttpClient::post(std::string_view path, std::string_view body) {
     return request("POST", path, body);
 }
 
+HttpResponse HttpClient::del(std::string_view path) {
+    return request("DELETE", path, "");
+}
+
 HttpResponse HttpClient::request(std::string_view method,
                                  std::string_view path,
                                  std::string_view body) {

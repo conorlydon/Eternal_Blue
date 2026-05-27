@@ -23,6 +23,8 @@ public:
     int send_message(std::string_view recipient_username, std::string_view plaintext);
     int fetch_inbox();
     int read_message(std::string_view message_id);
+    int delete_message(std::string_view message_id);
+    int forward_message(std::string_view message_id, std::string_view recipient_username);
 
     bool logged_in() const { return logged_in_; }
     const std::string& current_username() const { return username_; }

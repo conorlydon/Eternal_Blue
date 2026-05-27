@@ -260,3 +260,55 @@ int Client::read_message(std::string_view message_id) {
     std::cout << "\n" << m->plaintext << "\n";
     return 0;
 }
+
+int Client::delete_message(std::string_view message_id) {
+    if (!logged_in_) { std::cerr << "not logged in\n"; return 1; }
+    HttpResponse resp = http_.del("/api/messages/" + std::string(message_id));
+    if (resp.status_code == 200) {
+        store_.mark_deleted(std::string(message_id));
+        std::cout << "deleted " << message_id << "\n";
+        return 0;
+    }
+    std::cerr << "delete failed (" << resp.status_code << "): " << resp.body << "\n";
+    return 1;
+}
+
+int Client::forward_message(std::string_view message_id, std::string_view recipient_username) {
+    if (!logged_in_) { std::cerr << "not logged in\n"; return 1; }
+
+    auto m = store_.get_message(std::string(message_id));
+    if (!m) { std::cerr << "no such message: " << message_id << "\n"; return 1; }
+    if (m->plaintext.empty()) { std::cerr << "message has no decrypted plaintext\n"; return 1; }
+
+    User recipient;
+    try {
+        recipient = lookup_user(std::string(recipient_username));
+    } catch (const KeyChangedError& e) {
+        std::cerr << "ABORT: " << e.what() << "\n"; return 1;
+    } catch (const std::exception& e) {
+        std::cerr << "lookup failed: " << e.what() << "\n"; return 1;
+    }
+
+    long long sent_at_ms = current_ms();
+    std::string aad = make_aad(user_id_, recipient.user_id, sent_at_ms);
+
+    std::vector<unsigned char> pt(m->plaintext.begin(), m->plaintext.end());
+    Sealed sealed = crypto_.seal_auth(recipient.public_key, session_sk_, kMsgInfo, aad, pt);
+
+    json body = {
+        {"forward_to_username", recipient.username},
+        {"ciphertext",          to_base64url(sealed.ciphertext.data(), sealed.ciphertext.size())},
+        {"encapsulated_key",    to_base64url(sealed.enc.data(),        sealed.enc.size())},
+        {"sent_at_ms",          sent_at_ms},
+    };
+
+    HttpResponse resp = http_.post("/api/messages/" + std::string(message_id) + "/forward", body.dump());
+    if (resp.status_code == 201) {
+        json j = json::parse(resp.body);
+        std::cout << "forwarded to " << recipient.username
+                  << " [" << j.value("message_id", "?") << "]\n";
+        return 0;
+    }
+    std::cerr << "forward failed (" << resp.status_code << "): " << resp.body << "\n";
+    return 1;
+}
