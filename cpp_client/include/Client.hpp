@@ -6,6 +6,13 @@
 #include "TrustStore.hpp"
 #include <string>
 #include <string_view>
+#include <vector>
+
+struct ConvSummary {
+    std::string peer;
+    long long   last_sent_at_ms = 0;
+    int         count = 0;
+};
 
 // top-level orchestrator: owns the http client, crypto, keystore, sqlite store,
 // trust policy, and the in-memory session (token in http_, unwrapped secret key
@@ -21,10 +28,16 @@ public:
     int logout();
 
     int send_message(std::string_view recipient_username, std::string_view plaintext);
-    int fetch_inbox();
+    int sync();                                        // pull + decrypt + persist new messages
     int read_message(std::string_view message_id);
     int delete_message(std::string_view message_id);
     int forward_message(std::string_view message_id, std::string_view recipient_username);
+
+    // navigation (LocalStore-backed; no server round-trip)
+    std::vector<ConvSummary> list_conversations();
+    void                     print_conversations();
+    std::vector<Message>     list_thread(const std::string& peer);
+    void                     print_thread(const std::string& peer);
 
     bool logged_in() const { return logged_in_; }
     const std::string& current_username() const { return username_; }

@@ -41,15 +41,60 @@ void print_help() {
         "commands:\n"
         "  signup <username>          create an account on this machine\n"
         "  login <username>           authenticate and unlock the local key\n"
-        "  logout                     end the session, wipe the key\n"
-        "  send <username> <text...>      encrypt and send a message\n"
-        "  inbox                          fetch + decrypt incoming messages\n"
-        "  read <message_id>              print a stored message\n"
-        "  delete <message_id>            delete a message\n"
-        "  forward <message_id> <user>    re-encrypt and forward to another user\n"
-        "  health                         check server reachability\n"
-        "  help                           this message\n"
-        "  quit                           exit\n";
+        "  logout                          end the session, wipe the key\n"
+        "  sync                            fetch + decrypt new incoming messages (alias: inbox)\n"
+        "  conversations                   list peers grouped by last activity (alias: convos)\n"
+        "  chat <username>                 open a conversation with that peer\n"
+        "  send <username> <text...>       one-shot send without entering chat mode\n"
+        "  read <message_id>               print a stored message by id\n"
+        "  delete <message_id>             delete a message\n"
+        "  forward <message_id> <user>     re-encrypt and forward to another user\n"
+        "  health                          check server reachability\n"
+        "  help                            this message\n"
+        "  quit                            exit\n"
+        "\n"
+        "inside chat mode:\n"
+        "  <any text>                      send to the current peer\n"
+        "  /sync                           pull new messages, append to thread\n"
+        "  /list                           reprint the thread\n"
+        "  /delete <message_id>            delete a message from the thread\n"
+        "  /forward <message_id> <user>    forward a message to another user\n"
+        "  /back  or  /quit                return to the top-level prompt\n";
+}
+
+void run_chat(Client& client, const std::string& peer) {
+    client.print_thread(peer);
+    std::string line;
+    while (true) {
+        std::cout << peer << "| " << std::flush;
+        if (!std::getline(std::cin, line)) { std::cout << "\n"; break; }
+        if (line.empty()) continue;
+
+        try {
+            if (line[0] == '/') {
+                std::vector<std::string> args = split(line);
+                const std::string& sub = args[0];
+                if (sub == "/back" || sub == "/quit" || sub == "/exit") break;
+                else if (sub == "/sync") { client.sync(); client.print_thread(peer); }
+                else if (sub == "/list") client.print_thread(peer);
+                else if (sub == "/delete") {
+                    if (args.size() < 2) { std::cerr << "usage: /delete <message_id>\n"; continue; }
+                    client.delete_message(args[1]);
+                    client.print_thread(peer);
+                }
+                else if (sub == "/forward") {
+                    if (args.size() < 3) { std::cerr << "usage: /forward <message_id> <username>\n"; continue; }
+                    client.forward_message(args[1], args[2]);
+                }
+                else std::cerr << "unknown chat command: " << sub
+                               << " (try /back, /sync, /list, /delete, /forward)\n";
+            } else {
+                client.send_message(peer, line);
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "error: " << e.what() << "\n";
+        }
+    }
 }
 
 void run_repl(Client& client) {
@@ -84,7 +129,16 @@ void run_repl(Client& client) {
                 }
                 client.send_message(args[1], text);
             }
-            else if (cmd == "inbox") client.fetch_inbox();
+            else if (cmd == "sync" || cmd == "inbox") client.sync();
+            else if (cmd == "conversations" || cmd == "convos") {
+                if (!client.logged_in()) { std::cerr << "not logged in\n"; continue; }
+                client.print_conversations();
+            }
+            else if (cmd == "chat") {
+                if (!client.logged_in()) { std::cerr << "not logged in\n"; continue; }
+                if (args.size() < 2) { std::cerr << "usage: chat <username>\n"; continue; }
+                run_chat(client, args[1]);
+            }
             else if (cmd == "delete") {
                 if (args.size() < 2) { std::cerr << "usage: delete <message_id>\n"; continue; }
                 client.delete_message(args[1]);

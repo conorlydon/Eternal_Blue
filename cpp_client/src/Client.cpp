@@ -167,24 +167,32 @@ int Client::send_message(std::string_view recipient_username, std::string_view p
     std::vector<unsigned char> pt(plaintext.begin(), plaintext.end());
     Sealed sealed = crypto_.seal_auth(recipient.public_key, session_sk_, kMsgInfo, aad, pt);
 
+    // build a complete Message — to_send_json only serializes the wire fields,
+    // and the same struct is what we save locally after a successful post
     Message m;
+    m.sender_id          = user_id_;
+    m.sender_username    = username_;
+    m.recipient_id       = recipient.user_id;
     m.recipient_username = recipient.username;
     m.encapsulated_key.assign(sealed.enc.begin(), sealed.enc.end());
-    m.ciphertext         = std::move(sealed.ciphertext);
+    m.ciphertext         = sealed.ciphertext;          // keep a copy; need it for save_message
     m.sent_at_ms         = sent_at_ms;
+    m.plaintext          = std::string(plaintext);
+    m.signature_verified = true;
 
     HttpResponse resp = http_.post("/api/messages", m.to_send_json());
-    if (resp.status_code == 201) {
-        json j = json::parse(resp.body);
-        std::cout << "sent to " << recipient.username
-                  << " [" << j.value("message_id", "?") << "]\n";
-        return 0;
+    if (resp.status_code != 201) {
+        std::cerr << "send failed (" << resp.status_code << "): " << resp.body << "\n";
+        return 1;
     }
-    std::cerr << "send failed (" << resp.status_code << "): " << resp.body << "\n";
-    return 1;
+    json j = json::parse(resp.body);
+    m.message_id = j.value("message_id", "");
+    store_.save_message(m);                              // outbox: visible in conversations + chat
+    std::cout << "sent to " << recipient.username << " [" << m.message_id << "]\n";
+    return 0;
 }
 
-int Client::fetch_inbox() {
+int Client::sync() {
     if (!logged_in_) { std::cerr << "not logged in\n"; return 1; }
 
     HttpResponse resp = http_.get("/api/messages?box=inbox");
@@ -311,4 +319,68 @@ int Client::forward_message(std::string_view message_id, std::string_view recipi
     }
     std::cerr << "forward failed (" << resp.status_code << "): " << resp.body << "\n";
     return 1;
+}
+
+// group LocalStore messages by peer; flatten; sort by recency descending.
+std::vector<ConvSummary> Client::list_conversations() {
+    const std::string& me = username_;
+
+    std::unordered_map<std::string, ConvSummary> by_peer;
+    for (const auto& m : store_.list_messages()) {
+        const std::string peer = (m.sender_username == me)
+                                    ? m.recipient_username
+                                    : m.sender_username;
+        ConvSummary& s = by_peer[peer];
+        if (s.peer.empty()) s.peer = peer;
+        ++s.count;
+        if (m.sent_at_ms > s.last_sent_at_ms) s.last_sent_at_ms = m.sent_at_ms;
+    }
+
+    std::vector<ConvSummary> convs;
+    convs.reserve(by_peer.size());
+    for (auto& kv : by_peer) convs.push_back(std::move(kv.second));
+
+    std::sort(convs.begin(), convs.end(),
+              [](const ConvSummary& a, const ConvSummary& b) {
+                  return a.last_sent_at_ms > b.last_sent_at_ms;     // newest first
+              });
+    return convs;
+}
+
+void Client::print_conversations() {
+    auto convs = list_conversations();
+    if (convs.empty()) { std::cout << "(no conversations)\n"; return; }
+    for (const auto& c : convs) {
+        std::cout << "  " << c.peer
+                  << "  last " << ms_to_iso(c.last_sent_at_ms)
+                  << "  (" << c.count << (c.count == 1 ? " message" : " messages") << ")\n";
+    }
+}
+
+// select messages involving `peer` on either side; sort chronologically.
+std::vector<Message> Client::list_thread(const std::string& peer) {
+    auto all = store_.list_messages();
+    std::vector<Message> thread;
+    thread.reserve(all.size());
+    std::copy_if(all.begin(), all.end(), std::back_inserter(thread),
+                 [&peer](const Message& m) {
+                     return m.sender_username == peer || m.recipient_username == peer;
+                 });
+    std::sort(thread.begin(), thread.end(),
+              [](const Message& a, const Message& b) {
+                  return a.sent_at_ms < b.sent_at_ms;               // oldest first
+              });
+    return thread;
+}
+
+void Client::print_thread(const std::string& peer) {
+    auto thread = list_thread(peer);
+    std::cout << "── chat with " << peer << " ──\n";
+    if (thread.empty()) { std::cout << "(no messages yet)\n"; return; }
+    for (const auto& m : thread) {
+        const bool from_me = (m.sender_username == username_);
+        std::cout << "[" << (from_me ? std::string("you") : m.sender_username)
+                  << " " << ms_to_iso(m.sent_at_ms) << "] "
+                  << m.plaintext << "\n";
+    }
 }
