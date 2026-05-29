@@ -24,12 +24,22 @@ std::string home_dir() {
     const char* h = std::getenv("HOME");
     return h ? std::string(h) : std::string(".");
 }
-void ensure_eb_dir() {
-    const std::string d = home_dir() + "/.eternal-messenger";
-    ::mkdir(d.c_str(), 0700);   // EEXIST is fine; sqlite/keystore handle the rest
+// scope local storage by backend so switching --host doesn't merge pins / messages
+std::string backend_subdir(std::string_view host, std::string_view port) {
+    return std::string(host) + "_" + std::string(port);
 }
-std::string default_keystore_path() { ensure_eb_dir(); return home_dir() + "/.eternal-messenger/keys.bin"; }
-std::string default_store_path()    { ensure_eb_dir(); return home_dir() + "/.eternal-messenger/store.db"; }
+void ensure_eb_dir(std::string_view host, std::string_view port) {
+    ::mkdir((home_dir() + "/.eternal-messenger").c_str(), 0700);   // parent
+    ::mkdir((home_dir() + "/.eternal-messenger/" + backend_subdir(host, port)).c_str(), 0700);
+}
+std::string default_keystore_path(std::string_view host, std::string_view port) {
+    ensure_eb_dir(host, port);
+    return home_dir() + "/.eternal-messenger/" + backend_subdir(host, port) + "/keys.bin";
+}
+std::string default_store_path(std::string_view host, std::string_view port) {
+    ensure_eb_dir(host, port);
+    return home_dir() + "/.eternal-messenger/" + backend_subdir(host, port) + "/store.db";
+}
 
 long long current_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -56,8 +66,8 @@ constexpr const char* kMsgInfo = "eternal-blue-msg-v1";
 
 Client::Client(std::string_view host, std::string_view port, std::string_view ca_bundle)
     : http_(host, port, ca_bundle),
-      keystore_(default_keystore_path()),
-      store_(default_store_path()),
+      keystore_(default_keystore_path(host, port)),
+      store_(default_store_path(host, port)),
       trust_(store_) {}
 
 Client::~Client() {
@@ -327,9 +337,13 @@ std::vector<ConvSummary> Client::list_conversations() {
 
     std::unordered_map<std::string, ConvSummary> by_peer;
     for (const auto& m : store_.list_messages()) {
-        const std::string peer = (m.sender_username == me)
-                                    ? m.recipient_username
-                                    : m.sender_username;
+        // only group messages where the current user is one party; ignore
+        // anything else (e.g. third-party rows left over from a different identity)
+        std::string peer;
+        if      (m.sender_username    == me) peer = m.recipient_username;
+        else if (m.recipient_username == me) peer = m.sender_username;
+        else                                  continue;
+
         ConvSummary& s = by_peer[peer];
         if (s.peer.empty()) s.peer = peer;
         ++s.count;
@@ -357,14 +371,16 @@ void Client::print_conversations() {
     }
 }
 
-// select messages involving `peer` on either side; sort chronologically.
+// strict filter: messages BETWEEN me and peer (both sides represented), sorted chronologically.
 std::vector<Message> Client::list_thread(const std::string& peer) {
+    const std::string& me = username_;
     auto all = store_.list_messages();
     std::vector<Message> thread;
     thread.reserve(all.size());
     std::copy_if(all.begin(), all.end(), std::back_inserter(thread),
-                 [&peer](const Message& m) {
-                     return m.sender_username == peer || m.recipient_username == peer;
+                 [&peer, &me](const Message& m) {
+                     return (m.sender_username == me   && m.recipient_username == peer) ||
+                            (m.sender_username == peer && m.recipient_username == me);
                  });
     std::sort(thread.begin(), thread.end(),
               [](const Message& a, const Message& b) {

@@ -217,7 +217,7 @@ The C++ client opens its own TLS connection using OpenSSL primitives directly (`
 Requirements:
 - TLS minimum version: **1.2** (`SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION)`).
 - Cipher suites: OpenSSL default for TLS 1.2 (`HIGH:!aNULL:!eNULL:!MD5:!RC4:!3DES:!DES:!EXPORT`) and full default for TLS 1.3.
-- **SNI** is set via `SSL_set_tlsext_host_name(ssl, hostname)` — required for the production virtual host (`eternalblue.theburkenator.com`).
+- **SNI** is set via `SSL_set_tlsext_host_name(ssl, hostname)` — required for the production virtual host (`eternal-blue.theburkenator.com`).
 - After `SSL_connect`, the client verifies:
   - `SSL_get_verify_result(ssl) == X509_V_OK` — chain validated against the system CA bundle (overridable with `--ca-bundle`).
   - `X509_check_host(cert, hostname, strlen(hostname), 0, NULL) == 1` — hostname matches Subject Alt Name or CN.
