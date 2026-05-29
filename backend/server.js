@@ -50,7 +50,9 @@ await app.register(helmet, {
       imgSrc:     ["'self'", "data:"],
       styleSrc:   ["'self'", "'unsafe-inline'"],
     }
-  }
+  },
+  frameguard: { action: 'deny' },
+  noSniff: true,
 })
 
 // rate limiting

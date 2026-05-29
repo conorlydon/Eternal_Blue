@@ -191,7 +191,8 @@ const API_ERRORS = {
 }
 
 async function api(method, path, body, auth = true) {
-  const headers = { 'Content-Type': 'application/json' }
+  const headers = {}
+  if (body) headers['Content-Type'] = 'application/json'
   if (auth && S.token) headers['Authorization'] = `Bearer ${S.token}`
 
   let res, data
@@ -454,6 +455,64 @@ async function openConv(convId, peerUsername) {
   }
 }
 
+async function buildMsgHtml(msg) {
+  const mine = msg.sender_username === S.username
+  let plaintext
+  let hasRealPlaintext = false
+
+  if (mine) {
+    const cached = getCachedSentMsg(msg.message_id)
+    if (cached) {
+      plaintext = cached.t
+      hasRealPlaintext = true
+    } else {
+      plaintext = '[Sent from another device — ciphertext only]'
+    }
+  } else {
+    try {
+      plaintext = await hpkeDecrypt(msg)
+      hasRealPlaintext = true
+    } catch {
+      plaintext = null
+    }
+  }
+
+  if (hasRealPlaintext && plaintext !== null) {
+    plaintextCache.set(msg.message_id, plaintext)
+  }
+
+  const fwdTag      = msg.is_forwarded ? `<div class="msg-forwarded-tag">↪ Forwarded</div>` : ''
+  const bubbleClass = plaintext === null ? 'error' : (mine ? 'mine' : 'theirs')
+  const displayText = plaintext === null
+    ? '[Decryption failed — key mismatch or tampered message]'
+    : esc(plaintext)
+
+  // All action buttons use data attributes — no user content in HTML attributes
+  let actions = ''
+  if (hasRealPlaintext) {
+    actions += `<button class="act-btn" data-action="download" data-msg-id="${msg.message_id}">Download</button>`
+  }
+  if (hasRealPlaintext && !mine) {
+    actions += `<button class="act-btn" data-action="forward" data-msg-id="${msg.message_id}">Forward</button>`
+  }
+  if (msg.is_forwarded && mine) {
+    actions += `<button class="act-btn danger" data-action="revoke" data-msg-id="${msg.message_id}">Revoke</button>`
+  }
+  actions += `<button class="act-btn danger" data-action="delete" data-msg-id="${msg.message_id}">Delete</button>`
+
+  return `
+    <div class="msg ${bubbleClass}" id="msg-${msg.message_id}">
+      ${fwdTag}
+      <div class="msg-bubble">${displayText}</div>
+      <div class="msg-meta">
+        <span>${fmtTime(new Date(msg.sent_at))}</span>
+        ${hasRealPlaintext && !mine ? '<span class="lock" title="Sender authenticated">🔒</span>' : ''}
+      </div>
+      <div class="msg-actions">${actions}</div>
+    </div>
+  `
+}
+
 async function renderMessages(msgs) {
   const area = id('messages-area')
   if (!msgs.length) {
@@ -464,65 +523,57 @@ async function renderMessages(msgs) {
 
   const rendered = []
   for (const msg of msgs) {
-    const mine = msg.sender_username === S.username
-    let plaintext
-    let hasRealPlaintext = false
-
-    if (mine) {
-      const cached = getCachedSentMsg(msg.message_id)
-      if (cached) {
-        plaintext = cached.t
-        hasRealPlaintext = true
-      } else {
-        plaintext = '[Sent from another device — ciphertext only]'
-      }
-    } else {
-      try {
-        plaintext = await hpkeDecrypt(msg)
-        hasRealPlaintext = true
-      } catch {
-        plaintext = null
-      }
-    }
-
-    if (hasRealPlaintext && plaintext !== null) {
-      plaintextCache.set(msg.message_id, plaintext)
-    }
-
-    const fwdTag      = msg.is_forwarded ? `<div class="msg-forwarded-tag">↪ Forwarded</div>` : ''
-    const bubbleClass = plaintext === null ? 'error' : (mine ? 'mine' : 'theirs')
-    const displayText = plaintext === null
-      ? '[Decryption failed — key mismatch or tampered message]'
-      : esc(plaintext)
-
-    // All action buttons use data attributes — no user content in HTML attributes
-    let actions = ''
-    if (hasRealPlaintext) {
-      actions += `<button class="act-btn" data-action="download" data-msg-id="${msg.message_id}">Download</button>`
-    }
-    if (hasRealPlaintext && !mine) {
-      actions += `<button class="act-btn" data-action="forward" data-msg-id="${msg.message_id}">Forward</button>`
-    }
-    if (msg.is_forwarded && mine) {
-      actions += `<button class="act-btn danger" data-action="revoke" data-msg-id="${msg.message_id}">Revoke</button>`
-    }
-    actions += `<button class="act-btn danger" data-action="delete" data-msg-id="${msg.message_id}">Delete</button>`
-
-    rendered.push(`
-      <div class="msg ${bubbleClass}" id="msg-${msg.message_id}">
-        ${fwdTag}
-        <div class="msg-bubble">${displayText}</div>
-        <div class="msg-meta">
-          <span>${fmtTime(new Date(msg.sent_at))}</span>
-          ${hasRealPlaintext && !mine ? '<span class="lock" title="Sender authenticated">🔒</span>' : ''}
-        </div>
-        <div class="msg-actions">${actions}</div>
-      </div>
-    `)
+    rendered.push(await buildMsgHtml(msg))
   }
 
   area.innerHTML = rendered.join('')
   area.scrollTop = area.scrollHeight
+}
+
+// ── Auto-refresh polling ──────────────────────────────────────────────────
+let pollTimer = null
+
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(pollNewMessages, 3000)
+}
+
+function stopPolling() {
+  clearInterval(pollTimer)
+  pollTimer = null
+}
+
+async function pollNewMessages() {
+  if (!S.currentConvId) return
+  const convId = S.currentConvId
+
+  try {
+    const data = await api('GET', `/conversations/${convId}/messages?limit=50`)
+    if (convId !== S.currentConvId) return  // conversation changed while request was in flight
+
+    const area = id('messages-area')
+    if (area.querySelector('.spinner')) return  // still doing initial decrypt
+
+    let hasNew = false
+    for (const msg of data.messages) {
+      if (document.getElementById(`msg-${msg.message_id}`)) continue
+      hasNew = true
+      const html = await buildMsgHtml(msg)
+      if (convId !== S.currentConvId) return  // guard again after async decrypt
+      // Remove "No messages yet" placeholder if present before appending
+      const placeholder = area.querySelector('.loading-row')
+      if (placeholder) placeholder.remove()
+      area.insertAdjacentHTML('beforeend', html)
+    }
+
+    if (hasNew) {
+      area.scrollTop = area.scrollHeight
+      api('POST', `/conversations/${convId}/read`).catch(() => {})
+      loadConversations()
+    }
+  } catch {
+    // silently ignore poll errors — next tick will retry
+  }
 }
 
 // ── Send ──────────────────────────────────────────────────────────────────
