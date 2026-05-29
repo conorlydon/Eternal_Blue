@@ -132,9 +132,11 @@ export default async function messageRoutes(app) {
        FROM messages m
        JOIN users su ON su.id = m.sender_id
        JOIN users ru ON ru.id = m.recipient_id
+       LEFT JOIN revocations r ON r.message_id = m.id
        WHERE ${boxFilter}
          AND (m.sender_id    != $1 OR m.deleted_by_sender    = FALSE)
          AND (m.recipient_id != $1 OR m.deleted_by_recipient = FALSE)
+         AND r.id IS NULL
          ${since ? 'AND m.sent_at > $3' : ''}
        ORDER BY m.sent_at DESC
        LIMIT $2`,
@@ -163,10 +165,12 @@ export default async function messageRoutes(app) {
          m.is_forwarded,
          m.original_message_id,
          m.deleted_by_sender,
-         m.deleted_by_recipient
+         m.deleted_by_recipient,
+         r.id AS revocation_id
        FROM messages m
        JOIN users su ON su.id = m.sender_id
        JOIN users ru ON ru.id = m.recipient_id
+       LEFT JOIN revocations r ON r.message_id = m.id
        WHERE m.id = $1`,
       [req.params.id]
     )
@@ -181,7 +185,10 @@ export default async function messageRoutes(app) {
         (msg.recipient_id === userId && msg.deleted_by_recipient)) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'Message not found' })
     }
-    const { deleted_by_sender, deleted_by_recipient, ...response } = msg
+    if (msg.revocation_id !== null) {
+      return reply.code(403).send({ error: 'REVOKED', message: 'This message has been revoked' })
+    }
+    const { deleted_by_sender, deleted_by_recipient, revocation_id, ...response } = msg
     return reply.send(response)
   })
 

@@ -59,9 +59,11 @@ export default async function conversationRoutes(app) {
     const { rows: countRows } = await pool.query(
       `SELECT COUNT(*) AS total
        FROM messages m
+       LEFT JOIN revocations r ON r.message_id = m.id
        WHERE m.conversation_id = $1
          AND (m.deleted_by_sender = FALSE OR m.sender_id != $2)
-         AND (m.deleted_by_recipient = FALSE OR m.recipient_id != $2)`,
+         AND (m.deleted_by_recipient = FALSE OR m.recipient_id != $2)
+         AND r.id IS NULL`,
       [conversation_id, userId]
     )
 
@@ -82,10 +84,12 @@ export default async function conversationRoutes(app) {
        FROM messages m
        JOIN users su ON su.id = m.sender_id
        JOIN users ru ON ru.id = m.recipient_id
+       LEFT JOIN revocations r ON r.message_id = m.id
        WHERE m.conversation_id = $1
          AND m.sent_at < $2
          AND (m.deleted_by_sender = FALSE OR m.sender_id != $3)
          AND (m.deleted_by_recipient = FALSE OR m.recipient_id != $3)
+         AND r.id IS NULL
        ORDER BY m.sent_at ASC
        LIMIT $4`,
       [conversation_id, before, userId, limit]
