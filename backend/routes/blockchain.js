@@ -65,4 +65,46 @@ export default async function blockchainRoutes(app) {
       digests: rows.map(r => ({ message_id: r.message_id, digest: r.digest }))
     })
   })
+
+  // GET /api/blockchain/tx/:tx_hash
+  // Proxies eth_getTransactionReceipt to Sepolia server-side so the browser
+  // avoids CORS restrictions on public RPC endpoints.
+  app.get('/blockchain/tx/:tx_hash', async (req, reply) => {
+    const { tx_hash } = req.params
+    const CONTRACT_ADDRESS = (process.env.CONTRACT_ADDRESS || '0x932d2B7D1e0E5B43792D21a28849E8Cae85D0783').toLowerCase()
+    const RPC_URL = process.env.SEPOLIA_RPC_URL || 'https://rpc.sepolia.org'
+
+    let rpcRes
+    try {
+      rpcRes = await fetch(RPC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1,
+          method: 'eth_getTransactionReceipt',
+          params: [tx_hash]
+        })
+      })
+    } catch (e) {
+      return reply.code(502).send({ error: 'RPC_ERROR', message: 'Could not reach Sepolia RPC' })
+    }
+
+    const { result: receipt } = await rpcRes.json()
+    if (!receipt) {
+      return reply.code(404).send({ error: 'NOT_FOUND', message: 'Transaction not found or not yet confirmed' })
+    }
+
+    // batchHash is the first indexed param of DigestRecorded → topics[1]
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() === CONTRACT_ADDRESS) {
+        return reply.send({
+          on_chain_batch_hash: log.topics[1],
+          block_number: parseInt(receipt.blockNumber, 16),
+          tx_hash: receipt.transactionHash
+        })
+      }
+    }
+
+    return reply.code(404).send({ error: 'NOT_FOUND', message: 'DigestRecorded event not found in transaction' })
+  })
 }

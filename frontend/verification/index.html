@@ -236,9 +236,7 @@
   </div>
 
   <script type="module">
-    const API_BASE   = 'https://eternal-blue.theburkenator.com'
-    const SEPOLIA_RPC = 'https://rpc.sepolia.org'
-    const EVENT_ABI  = ['event DigestRecorded(bytes32 indexed batchHash, uint256 timestamp)']
+    const API_BASE = 'https://eternal-blue.theburkenator.com'
 
     function decodeBase64(str) {
       const b64    = str.replace(/-/g, '+').replace(/_/g, '/')
@@ -295,26 +293,15 @@
           ethers.toUtf8Bytes(batchData.digests.map(d => d.digest).join(''))
         )
 
-        // 5. fetch the actual Ethereum transaction receipt from Sepolia and
-        //    extract the batchHash from the DigestRecorded event
+        // 5. fetch the on-chain batch hash via our backend proxy
+        //    (direct browser calls to public Sepolia RPCs are blocked by CORS)
         spinner.textContent = 'Querying Sepolia blockchain...'
-        const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC)
-        const receipt  = await provider.getTransactionReceipt(data.tx_hash)
-        if (!receipt) throw new Error('Transaction not found on Sepolia — it may not be confirmed yet')
+        const txRes  = await fetch(`${API_BASE}/api/blockchain/tx/${data.tx_hash}`)
+        const txData = await txRes.json()
+        if (!txRes.ok) throw new Error(txData.message || 'Failed to fetch on-chain transaction')
 
-        const iface = new ethers.Interface(EVENT_ABI)
-        let onChainBatchHash = null
-        for (const log of receipt.logs) {
-          try {
-            const parsed = iface.parseLog(log)
-            if (parsed.name === 'DigestRecorded') {
-              onChainBatchHash = parsed.args.batchHash
-              break
-            }
-          } catch { /* skip unrelated logs */ }
-        }
-
-        if (!onChainBatchHash) throw new Error('DigestRecorded event not found in transaction — wrong tx?')
+        const onChainBatchHash = txData.on_chain_batch_hash
+        if (!onChainBatchHash) throw new Error('DigestRecorded event not found in transaction')
 
         const chainVerified = recomputedBatchHash.toLowerCase() === onChainBatchHash.toLowerCase()
 
