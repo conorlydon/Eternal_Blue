@@ -74,9 +74,9 @@ export default async function blockchainRoutes(app) {
     const CONTRACT_ADDRESS = (process.env.CONTRACT_ADDRESS || '0x932d2B7D1e0E5B43792D21a28849E8Cae85D0783').toLowerCase()
     const RPC_URL = process.env.SEPOLIA_RPC_URL || 'https://rpc.sepolia.org'
 
-    let rpcRes
+    let receipt
     try {
-      rpcRes = await fetch(RPC_URL, {
+      const rpcRes = await fetch(RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -85,11 +85,11 @@ export default async function blockchainRoutes(app) {
           params: [tx_hash]
         })
       })
+      const json = await rpcRes.json()
+      receipt = json.result
     } catch (e) {
-      return reply.code(502).send({ error: 'RPC_ERROR', message: 'Could not reach Sepolia RPC' })
+      return reply.code(502).send({ error: 'RPC_ERROR', message: `Sepolia RPC error: ${e.message}` })
     }
-
-    const { result: receipt } = await rpcRes.json()
     if (!receipt) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'Transaction not found or not yet confirmed' })
     }
