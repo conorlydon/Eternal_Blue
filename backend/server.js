@@ -46,7 +46,7 @@ await app.register(helmet, {
       // app.js is served from 'self'; it imports from esm.sh — no unsafe-inline needed
       scriptSrc:  ["'self'", "https://esm.sh", "https://cdn.esm.sh"],
       // no scriptSrcAttr — zero inline event handlers in the HTML
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", "https://rpc.sepolia.org"],
       imgSrc:     ["'self'", "data:"],
       styleSrc:   ["'self'", "'unsafe-inline'"],
     }

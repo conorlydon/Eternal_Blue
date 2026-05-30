@@ -32,11 +32,37 @@ export default async function blockchainRoutes(app) {
     return reply.send({
       message_id:   r.message_id,
       digest:       r.digest,
+      batch_id:     r.batch_id,
       batch_hash:   r.batch_hash,
       tx_hash:      r.tx_hash,
       block_number: r.block_number,
       recorded_at:  r.recorded_at,
       sepolia_url:  `https://sepolia.etherscan.io/tx/${r.tx_hash}`
+    })
+  })
+
+  // GET /api/blockchain/batch/:batch_id
+  // Returns all per-message digests in a batch in flush order.
+  // Callers use this to independently recompute the batch hash and verify it
+  // against the on-chain DigestRecorded event without trusting the server.
+  app.get('/blockchain/batch/:batch_id', async (req, reply) => {
+    const { batch_id } = req.params
+
+    const { rows } = await pool.query(
+      `SELECT dq.message_id, dq.digest
+       FROM digest_queue dq
+       WHERE dq.batch_id = $1
+       ORDER BY dq.queued_at ASC`,
+      [batch_id]
+    )
+
+    if (rows.length === 0) {
+      return reply.code(404).send({ error: 'NOT_FOUND', message: 'Batch not found' })
+    }
+
+    return reply.send({
+      batch_id,
+      digests: rows.map(r => ({ message_id: r.message_id, digest: r.digest }))
     })
   })
 }

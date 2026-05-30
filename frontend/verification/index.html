@@ -205,8 +205,16 @@
         <span class="detail-value" id="out-recorded"></span>
       </div>
       <div class="detail-row">
+        <span class="detail-label">Batch hash (recomputed)</span>
+        <span class="detail-value" id="out-batch-recomputed"></span>
+      </div>
+      <div class="detail-row">
         <span class="detail-label">Batch hash (on-chain)</span>
-        <span class="detail-value" id="out-batch-hash"></span>
+        <span class="detail-value" id="out-batch-onchain"></span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Chain verified</span>
+        <span class="detail-value" id="out-chain-status"></span>
       </div>
       <div class="detail-row">
         <span class="detail-label">Transaction hash</span>
@@ -228,11 +236,12 @@
   </div>
 
   <script type="module">
-    const API_BASE = 'https://eternal-blue.theburkenator.com'
+    const API_BASE   = 'https://eternal-blue.theburkenator.com'
+    const SEPOLIA_RPC = 'https://rpc.sepolia.org'
+    const EVENT_ABI  = ['event DigestRecorded(bytes32 indexed batchHash, uint256 timestamp)']
 
-    // decode base64 or base64url (no padding required) to Uint8Array
     function decodeBase64(str) {
-      const b64 = str.replace(/-/g, '+').replace(/_/g, '/')
+      const b64    = str.replace(/-/g, '+').replace(/_/g, '/')
       const padded = b64 + '='.repeat((4 - b64.length % 4) % 4)
       return Uint8Array.from(atob(padded), c => c.charCodeAt(0))
     }
@@ -251,50 +260,89 @@
       resultEl.style.display = 'none'
 
       if (!messageId || !ciphertext) {
-        errorEl.textContent    = 'Please enter both a message ID and ciphertext.'
-        errorEl.style.display  = 'block'
+        errorEl.textContent   = 'Please enter both a message ID and ciphertext.'
+        errorEl.style.display = 'block'
         return
       }
 
-      btn.disabled           = true
-      spinner.style.display  = 'block'
+      btn.disabled          = true
+      spinner.style.display = 'block'
 
       try {
-        // 1. fetch the on-chain record from the API
-        const res  = await fetch(`${API_BASE}/api/blockchain/digest/${messageId}`)
-        const data = await res.json()
-
-        if (!res.ok) {
-          throw new Error(data.message || 'Failed to fetch on-chain record')
-        }
-
-        // 2. recompute keccak256 of the raw ciphertext bytes
-        //    ciphertext may be base64url (wire format) or standard base64 — decodeBase64 handles both
         const { ethers } = await import('https://esm.sh/ethers@6')
+
+        // 1. compute digest of the provided ciphertext locally
         const bytes          = decodeBase64(ciphertext)
         const computedDigest = ethers.keccak256(bytes)
 
-        // 3. compare against recorded digest
+        // 2. fetch server record — gives us batch_id, tx_hash, and the stored per-message digest
+        spinner.textContent = 'Fetching server record...'
+        const res  = await fetch(`${API_BASE}/api/blockchain/digest/${messageId}`)
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.message || 'Failed to fetch server record')
+
         const digestMatch = computedDigest.toLowerCase() === data.digest.toLowerCase()
 
-        // 4. show results
-        const passed = digestMatch
-        resultEl.className = `result ${passed ? 'pass' : 'fail'}`
+        // 3. fetch all digests in the same batch — needed to recompute the batch hash independently
+        spinner.textContent = 'Fetching batch members...'
+        const batchRes  = await fetch(`${API_BASE}/api/blockchain/batch/${data.batch_id}`)
+        const batchData = await batchRes.json()
+        if (!batchRes.ok) throw new Error(batchData.message || 'Failed to fetch batch')
 
-        document.getElementById('result-badge').className  = `badge ${passed ? 'pass' : 'fail'}`
+        // 4. recompute the batch hash the same way the digest service does:
+        //    keccak256(utf8(digest_0 + digest_1 + ... + digest_n))
+        const recomputedBatchHash = ethers.keccak256(
+          ethers.toUtf8Bytes(batchData.digests.map(d => d.digest).join(''))
+        )
+
+        // 5. fetch the actual Ethereum transaction receipt from Sepolia and
+        //    extract the batchHash from the DigestRecorded event
+        spinner.textContent = 'Querying Sepolia blockchain...'
+        const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC)
+        const receipt  = await provider.getTransactionReceipt(data.tx_hash)
+        if (!receipt) throw new Error('Transaction not found on Sepolia — it may not be confirmed yet')
+
+        const iface = new ethers.Interface(EVENT_ABI)
+        let onChainBatchHash = null
+        for (const log of receipt.logs) {
+          try {
+            const parsed = iface.parseLog(log)
+            if (parsed.name === 'DigestRecorded') {
+              onChainBatchHash = parsed.args.batchHash
+              break
+            }
+          } catch { /* skip unrelated logs */ }
+        }
+
+        if (!onChainBatchHash) throw new Error('DigestRecorded event not found in transaction — wrong tx?')
+
+        const chainVerified = recomputedBatchHash.toLowerCase() === onChainBatchHash.toLowerCase()
+
+        // 6. overall pass: the ciphertext hashes to the stored digest AND
+        //    the batch hash we independently computed matches what is immutably on-chain
+        const passed = digestMatch && chainVerified
+
+        resultEl.className = `result ${passed ? 'pass' : 'fail'}`
+        document.getElementById('result-badge').className   = `badge ${passed ? 'pass' : 'fail'}`
         document.getElementById('result-badge').textContent = passed ? 'PASS' : 'FAIL'
         document.getElementById('result-title').textContent = passed
-          ? 'Message is untampered — digest matches on-chain record'
-          : 'Digest mismatch — message may have been altered'
+          ? 'Message is untampered — digest confirmed on Sepolia'
+          : digestMatch
+            ? 'Digest matches server record but batch hash mismatch on-chain'
+            : 'Digest mismatch — ciphertext does not match server record'
 
-        document.getElementById('out-message-id').textContent = data.message_id
-        document.getElementById('out-computed').textContent   = computedDigest
-        document.getElementById('out-recorded').textContent   = data.digest
-        document.getElementById('out-batch-hash').textContent = data.batch_hash
-        document.getElementById('out-tx').textContent         = data.tx_hash
-        document.getElementById('out-block').textContent      = data.block_number
-        document.getElementById('out-time').textContent       = new Date(data.recorded_at).toUTCString()
-        document.getElementById('out-etherscan').innerHTML    =
+        document.getElementById('out-message-id').textContent    = data.message_id
+        document.getElementById('out-computed').textContent      = computedDigest
+        document.getElementById('out-recorded').textContent      = data.digest
+        document.getElementById('out-batch-recomputed').textContent = recomputedBatchHash
+        document.getElementById('out-batch-onchain').textContent    = onChainBatchHash
+        document.getElementById('out-chain-status').textContent  = chainVerified
+          ? '✓ on-chain batch hash matches recomputed hash'
+          : '✗ mismatch — server may have returned a fraudulent tx_hash'
+        document.getElementById('out-tx').textContent            = data.tx_hash
+        document.getElementById('out-block').textContent         = data.block_number
+        document.getElementById('out-time').textContent          = new Date(data.recorded_at).toUTCString()
+        document.getElementById('out-etherscan').innerHTML       =
           `<a href="${data.sepolia_url}" target="_blank">${data.sepolia_url}</a>`
 
         resultEl.style.display = 'block'
@@ -304,6 +352,7 @@
         errorEl.style.display = 'block'
       } finally {
         btn.disabled          = false
+        spinner.textContent   = 'Checking on-chain record...'
         spinner.style.display = 'none'
       }
     }
