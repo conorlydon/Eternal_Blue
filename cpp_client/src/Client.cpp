@@ -265,7 +265,32 @@ int Client::sync() {
                   << " " << ms_to_iso(m.sent_at_ms) << "\n";
     }
 
-    std::cout << "inbox: " << saved << " new, " << skipped << " skipped\n";
+    // reconcile revocations: a message we already cached may since have been
+    // recalled by its sender. the server filters revoked messages out of the
+    // inbox above, so we learn about them from this dedicated list and null the
+    // local plaintext for any we still hold.
+    int revoked = 0;
+    HttpResponse rev = http_.get("/api/messages/revoked");
+    if (rev.status_code == 200) {
+        try {
+            json rj = json::parse(rev.body);
+            for (const auto& id_j : rj.at("revoked_ids")) {
+                std::string id = id_j.get<std::string>();
+                auto existing = store_.get_message(id);
+                if (existing && !existing->revoked) {
+                    store_.mark_revoked(id);
+                    ++revoked;
+                }
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "revocation sync skipped: " << e.what() << "\n";
+        }
+    } else {
+        std::cerr << "revocation sync failed (" << rev.status_code << ")\n";
+    }
+
+    std::cout << "inbox: " << saved << " new, " << revoked << " revoked, "
+              << skipped << " skipped\n";
     return 0;
 }
 
@@ -288,6 +313,29 @@ int Client::delete_message(std::string_view message_id) {
         return 0;
     }
     std::cerr << "delete failed (" << resp.status_code << "): " << resp.body << "\n";
+    return 1;
+}
+
+// sender-only recall. the server stops serving the ciphertext (and reports the
+// id via /messages/revoked so the recipient nulls their copy on next sync); we
+// null our own copy here too. revokes only this message — forwarded copies are
+// independent messages and are left intact.
+int Client::revoke_message(std::string_view message_id) {
+    if (!logged_in_) { std::cerr << "not logged in\n"; return 1; }
+
+    auto m = store_.get_message(std::string(message_id));
+    if (!m) { std::cerr << "no such message: " << message_id << "\n"; return 1; }
+    if (m->sender_username != username_) {
+        std::cerr << "can only revoke messages you sent\n"; return 1;
+    }
+
+    HttpResponse resp = http_.del("/api/messages/" + std::string(message_id) + "/revoke");
+    if (resp.status_code == 200) {
+        store_.mark_revoked(std::string(message_id));
+        std::cout << "revoked " << message_id << "\n";
+        return 0;
+    }
+    std::cerr << "revoke failed (" << resp.status_code << "): " << resp.body << "\n";
     return 1;
 }
 
@@ -399,7 +447,7 @@ std::vector<Message> Client::print_thread(const std::string& peer) {
         std::cout << (i + 1) << ". "
                   << "[" << (from_me ? std::string("you") : m.sender_username)
                   << " " << ms_to_iso(m.sent_at_ms) << "] "
-                  << m.plaintext << "\n";
+                  << (m.revoked ? "(message revoked)" : m.plaintext) << "\n";
     }
     return thread;
 }

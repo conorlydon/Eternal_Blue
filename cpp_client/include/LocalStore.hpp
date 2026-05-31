@@ -25,6 +25,7 @@ public:
     std::optional<Message> get_message(const std::string& message_id);
     std::vector<Message> list_messages();          // excludes soft-deleted, newest first
     void mark_deleted(const std::string& message_id);
+    void mark_revoked(const std::string& message_id);   // null the plaintext, flag as revoked
 
     // tofu pins (back TrustStore)
     void save_pin(const User& user);

@@ -20,6 +20,7 @@ struct Message {
     // client-only, never sent
     std::string plaintext;
     bool        signature_verified = false;
+    bool        revoked = false;                     // sender recalled it; plaintext nulled locally
 
     std::string to_send_json() const;               // body for POST /api/messages
     static Message from_json(std::string_view json);

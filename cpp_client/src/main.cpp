@@ -47,7 +47,8 @@ void print_help() {
         "  chat <username>                 open a conversation with that peer\n"
         "  send <username> <text...>       one-shot send without entering chat mode\n"
         "  read <message_id>               print a stored message by id\n"
-        "  delete <message_id>             delete a message\n"
+        "  delete <message_id>             delete a message (your view only)\n"
+        "  revoke <message_id>             recall a message you sent, for both sides\n"
         "  forward <message_id> <user>     re-encrypt and forward to another user\n"
         "  health                          check server reachability\n"
         "  help                            this message\n"
@@ -58,6 +59,7 @@ void print_help() {
         "  /sync                           pull new messages, append to thread\n"
         "  /list                           reprint the thread\n"
         "  /delete <#>                     delete the Nth message in the printed thread\n"
+        "  /revoke <#>                     recall the Nth message (must be yours)\n"
         "  /forward <#> <user>             forward the Nth message in the printed thread\n"
         "  /back  or  /quit                return to the top-level prompt\n";
 }
@@ -98,6 +100,13 @@ void run_chat(Client& client, const std::string& peer) {
                     client.delete_message(id);
                     thread = client.print_thread(peer);
                 }
+                else if (sub == "/revoke") {
+                    if (args.size() < 2) { std::cerr << "usage: /revoke <#>\n"; continue; }
+                    std::string id = resolve_index(thread, args[1]);
+                    if (id.empty()) continue;
+                    client.revoke_message(id);
+                    thread = client.print_thread(peer);
+                }
                 else if (sub == "/forward") {
                     if (args.size() < 3) { std::cerr << "usage: /forward <#> <username>\n"; continue; }
                     std::string id = resolve_index(thread, args[1]);
@@ -105,7 +114,7 @@ void run_chat(Client& client, const std::string& peer) {
                     client.forward_message(id, args[2]);
                 }
                 else std::cerr << "unknown chat command: " << sub
-                               << " (try /back, /sync, /list, /delete, /forward)\n";
+                               << " (try /back, /sync, /list, /delete, /revoke, /forward)\n";
             } else {
                 client.send_message(peer, line);
                 thread = client.print_thread(peer);   // refresh so the new outbound shows + indices stay current
@@ -161,6 +170,10 @@ void run_repl(Client& client) {
             else if (cmd == "delete") {
                 if (args.size() < 2) { std::cerr << "usage: delete <message_id>\n"; continue; }
                 client.delete_message(args[1]);
+            }
+            else if (cmd == "revoke") {
+                if (args.size() < 2) { std::cerr << "usage: revoke <message_id>\n"; continue; }
+                client.revoke_message(args[1]);
             }
             else if (cmd == "forward") {
                 if (args.size() < 3) { std::cerr << "usage: forward <message_id> <username>\n"; continue; }

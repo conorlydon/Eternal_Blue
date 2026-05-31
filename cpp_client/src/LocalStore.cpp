@@ -30,7 +30,8 @@ LocalStore::LocalStore(const std::string& path) {
             original_message_id TEXT    NOT NULL DEFAULT '',
             plaintext           TEXT    NOT NULL DEFAULT '',
             signature_verified  INTEGER NOT NULL DEFAULT 0,
-            deleted             INTEGER NOT NULL DEFAULT 0
+            deleted             INTEGER NOT NULL DEFAULT 0,
+            revoked             INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS pinned_keys (
             username    TEXT PRIMARY KEY,
@@ -49,6 +50,12 @@ LocalStore::LocalStore(const std::string& path) {
         db_ = nullptr;
         throw LocalStoreError("schema: " + msg);
     }
+
+    // migrate stores created before the `revoked` column existed. sqlite has no
+    // ADD COLUMN IF NOT EXISTS, so run it unconditionally and ignore the
+    // "duplicate column name" error returned on stores that already have it.
+    sqlite3_exec(db_, "ALTER TABLE messages ADD COLUMN revoked INTEGER NOT NULL DEFAULT 0",
+                 nullptr, nullptr, nullptr);
 }
 
 LocalStore::~LocalStore() {
@@ -76,6 +83,7 @@ static Message row_to_message(sqlite3_stmt* stmt) {
     m.original_message_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
     m.plaintext           = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
     m.signature_verified  = sqlite3_column_int(stmt, 11) != 0;
+    m.revoked             = sqlite3_column_int(stmt, 12) != 0;
     return m;
 }
 
@@ -113,7 +121,7 @@ std::optional<Message> LocalStore::get_message(const std::string& message_id) {
     const char* sql = R"(
         SELECT message_id, sender_id, sender_username, recipient_id, recipient_username,
                encapsulated_key, ciphertext, sent_at_ms, is_forwarded, original_message_id,
-               plaintext, signature_verified
+               plaintext, signature_verified, revoked
         FROM messages WHERE message_id = ? AND deleted = 0
     )";
     sqlite3_stmt* stmt = nullptr;
@@ -133,7 +141,7 @@ std::vector<Message> LocalStore::list_messages() {
     const char* sql = R"(
         SELECT message_id, sender_id, sender_username, recipient_id, recipient_username,
                encapsulated_key, ciphertext, sent_at_ms, is_forwarded, original_message_id,
-               plaintext, signature_verified
+               plaintext, signature_verified, revoked
         FROM messages WHERE deleted = 0 ORDER BY sent_at_ms DESC
     )";
     sqlite3_stmt* stmt = nullptr;
@@ -159,6 +167,20 @@ void LocalStore::mark_deleted(const std::string& message_id) {
     sqlite3_finalize(stmt);
     if (rc != SQLITE_DONE)
         throw LocalStoreError(std::string("mark_deleted: ") + sqlite3_errmsg(db_));
+}
+
+// null the plaintext and flag the row revoked. the message stays in the thread
+// (not deleted) so it can render as a tombstone rather than silently vanish.
+void LocalStore::mark_revoked(const std::string& message_id) {
+    const char* sql = "UPDATE messages SET plaintext = '', revoked = 1 WHERE message_id = ?";
+    sqlite3_stmt* stmt = nullptr;
+    check_ok(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr), db_, "mark_revoked prepare");
+    sqlite3_bind_text(stmt, 1, message_id.c_str(), -1, SQLITE_STATIC);
+
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    if (rc != SQLITE_DONE)
+        throw LocalStoreError(std::string("mark_revoked: ") + sqlite3_errmsg(db_));
 }
 
 void LocalStore::save_pin(const User& user) {

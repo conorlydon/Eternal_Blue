@@ -31,6 +31,7 @@ public:
     int sync();                                        // pull + decrypt + persist new messages
     int read_message(std::string_view message_id);
     int delete_message(std::string_view message_id);
+    int revoke_message(std::string_view message_id);   // sender recalls a message for both sides
     int forward_message(std::string_view message_id, std::string_view recipient_username);
 
     // navigation (LocalStore-backed; no server round-trip)
