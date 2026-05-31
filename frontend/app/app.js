@@ -495,7 +495,7 @@ async function buildMsgHtml(msg) {
   if (hasRealPlaintext && !mine) {
     actions += `<button class="act-btn" data-action="forward" data-msg-id="${msg.message_id}">Forward</button>`
   }
-  if (msg.is_forwarded && mine) {
+  if (mine) {
     actions += `<button class="act-btn danger" data-action="revoke" data-msg-id="${msg.message_id}">Revoke</button>`
   }
   actions += `<button class="act-btn danger" data-action="delete" data-msg-id="${msg.message_id}">Delete</button>`
