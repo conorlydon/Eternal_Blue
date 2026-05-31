@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS messages (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS revocations (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    message_id  UUID NOT NULL REFERENCES messages(id),
+    message_id  UUID NOT NULL REFERENCES messages(id) UNIQUE,
     revoked_by  UUID NOT NULL REFERENCES users(id),
     revoked_at  TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(message_id)
