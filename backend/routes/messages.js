@@ -145,6 +145,24 @@ export default async function messageRoutes(app) {
     return reply.send({ messages: rows, total: rows.length })
   })
 
+  // GET /api/messages/revoked
+  // ids of revoked messages the caller is a party to. the list/get endpoints
+  // filter revoked messages out entirely, so a client that already cached one
+  // before it was revoked learns about it here and nulls its local plaintext.
+  app.get('/messages/revoked', {
+    onRequest: [app.authenticate]
+  }, async (req, reply) => {
+    const userId = req.user.user_id
+    const { rows } = await pool.query(
+      `SELECT r.message_id
+       FROM revocations r
+       JOIN messages m ON m.id = r.message_id
+       WHERE m.sender_id = $1 OR m.recipient_id = $1`,
+      [userId]
+    )
+    return reply.send({ revoked_ids: rows.map(row => row.message_id) })
+  })
+
   // GET /api/messages/:id
   app.get('/messages/:id', {
     onRequest: [app.authenticate]
@@ -325,29 +343,27 @@ export default async function messageRoutes(app) {
   })
 
   // DELETE /api/messages/:id/revoke
+  // sender-initiated recall of a single message. revokes only this one row —
+  // it does NOT propagate up or down a forward chain (a forwarded copy is its
+  // own message, re-encrypted to a different recipient, and is left untouched).
   app.delete('/messages/:id/revoke', {
     onRequest: [app.authenticate]
   }, async (req, reply) => {
     const userId = req.user.user_id
     const { rows } = await pool.query(
-      `SELECT m.*, om.sender_id AS original_sender_id
-       FROM messages m
-       LEFT JOIN messages om ON om.id = m.original_message_id
-       WHERE m.id = $1`,
+      'SELECT sender_id FROM messages WHERE id = $1',
       [req.params.id]
     )
     if (rows.length === 0) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'Message not found' })
     }
-    const msg = rows[0]
-    if (!msg.is_forwarded) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: 'Only forwarded messages can be revoked' })
+    if (rows[0].sender_id !== userId) {
+      return reply.code(403).send({ error: 'FORBIDDEN', message: 'Only the sender can revoke this message' })
     }
-    if (msg.original_sender_id !== userId) {
-      return reply.code(403).send({ error: 'FORBIDDEN', message: 'Only original sender can revoke' })
-    }
+    // idempotent — UNIQUE(message_id) makes a second revoke a no-op
     await pool.query(
-      `INSERT INTO revocations (message_id, revoked_by) VALUES ($1, $2)`,
+      `INSERT INTO revocations (message_id, revoked_by) VALUES ($1, $2)
+       ON CONFLICT (message_id) DO NOTHING`,
       [req.params.id, userId]
     )
     return reply.send({ revoked: true, message_id: req.params.id, revoked_at: new Date().toISOString() })

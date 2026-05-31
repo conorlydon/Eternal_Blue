@@ -58,14 +58,26 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 -- ---------------------------------------------------------------------------
--- revocations  (audit trail for revoked forwarded copies)
+-- revocations  (one row per revoked message — sender-initiated recall)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS revocations (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_id  UUID NOT NULL REFERENCES messages(id),
     revoked_by  UUID NOT NULL REFERENCES users(id),
-    revoked_at  TIMESTAMPTZ DEFAULT NOW()
+    revoked_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(message_id)
 );
+
+-- backfill the UNIQUE(message_id) constraint on databases created before it
+-- was added (CREATE TABLE IF NOT EXISTS won't alter an existing table)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'revocations_message_id_key'
+    ) THEN
+        ALTER TABLE revocations ADD CONSTRAINT revocations_message_id_key UNIQUE (message_id);
+    END IF;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- digest_queue  (pending keccak256 digests awaiting batch flush to Sepolia)
