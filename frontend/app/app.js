@@ -492,7 +492,7 @@ async function buildMsgHtml(msg) {
   if (hasRealPlaintext) {
     actions += `<button class="act-btn" data-action="download" data-msg-id="${msg.message_id}">Download</button>`
   }
-  if (hasRealPlaintext && !mine) {
+  if (hasRealPlaintext) {
     actions += `<button class="act-btn" data-action="forward" data-msg-id="${msg.message_id}">Forward</button>`
   }
   if (mine) {
