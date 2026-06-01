@@ -2,20 +2,28 @@
 #include <sqlite3.h>
 #include <cstring>
 
+/*rc- sqlite return
+ db- sqlite database connection
+ op- label, see what line crashed*/
 static void check_ok(int rc, sqlite3* db, const char* op) {
     if (rc != SQLITE_OK)
         throw LocalStoreError(std::string(op) + ": " + sqlite3_errmsg(db));
 }
 
+//sqlite constructor
 LocalStore::LocalStore(const std::string& path) {
+    //open db file
     int rc = sqlite3_open(path.c_str(), &db_);
+    //error handling: may still partially open
     if (rc != SQLITE_OK) {
         std::string msg = db_ ? sqlite3_errmsg(db_) : "sqlite3_open failed";
         sqlite3_close(db_);
         db_ = nullptr;
         throw LocalStoreError("open: " + msg);
     }
-
+    //table creations: schema: create table if doesnt exist ? do nothing
+    //messages: stores every message client received
+    //pinned_keys: stores first pub key of everyone youve messaged(TOFU pinning)
     const char* schema = R"(
         CREATE TABLE IF NOT EXISTS messages (
             message_id          TEXT    PRIMARY KEY,
@@ -57,11 +65,14 @@ LocalStore::LocalStore(const std::string& path) {
     sqlite3_exec(db_, "ALTER TABLE messages ADD COLUMN revoked INTEGER NOT NULL DEFAULT 0",
                  nullptr, nullptr, nullptr);
 }
-
+//destructor
+//close db connection + release file lock
+//db_ points to nothing so it crashes if anything uses it.
 LocalStore::~LocalStore() {
     if (db_) { sqlite3_close(db_); db_ = nullptr; }
 }
 
+//takes row of db results, converts into message obj
 static Message row_to_message(sqlite3_stmt* stmt) {
     Message m;
     m.message_id          = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
@@ -70,6 +81,7 @@ static Message row_to_message(sqlite3_stmt* stmt) {
     m.recipient_id        = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
     m.recipient_username  = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
 
+    //read BLOBs(encryption keys+ciphertext)
     const auto* ek = static_cast<const unsigned char*>(sqlite3_column_blob(stmt, 5));
     int ek_size    = sqlite3_column_bytes(stmt, 5);
     m.encapsulated_key.assign(ek, ek + ek_size);
@@ -78,6 +90,7 @@ static Message row_to_message(sqlite3_stmt* stmt) {
     int ct_size    = sqlite3_column_bytes(stmt, 6);
     m.ciphertext.assign(ct, ct + ct_size);
 
+    //read int columns
     m.sent_at_ms          = sqlite3_column_int64(stmt, 7);
     m.is_forwarded        = sqlite3_column_int(stmt, 8) != 0;
     m.original_message_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
@@ -88,6 +101,7 @@ static Message row_to_message(sqlite3_stmt* stmt) {
 }
 
 void LocalStore::save_message(const Message& m) {
+    //sql template: ?==pllaceholder, 0 as new message never deleted
     const char* sql = R"(
         INSERT OR REPLACE INTO messages
             (message_id, sender_id, sender_username, recipient_id, recipient_username,
@@ -96,6 +110,7 @@ void LocalStore::save_message(const Message& m) {
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)
     )";
     sqlite3_stmt* stmt = nullptr;
+    //compile sql & fill in values
     check_ok(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr), db_, "save_message prepare");
 
     sqlite3_bind_text(stmt,  1, m.message_id.c_str(),          -1, SQLITE_STATIC);
@@ -111,12 +126,14 @@ void LocalStore::save_message(const Message& m) {
     sqlite3_bind_text(stmt, 11, m.plaintext.c_str(),           -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt,  12, m.signature_verified ? 1 : 0);
 
+    //execute+cleanup
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     if (rc != SQLITE_DONE)
         throw LocalStoreError(std::string("save_message: ") + sqlite3_errmsg(db_));
 }
 
+//type: wrapper(might have a value, may not)
 std::optional<Message> LocalStore::get_message(const std::string& message_id) {
     const char* sql = R"(
         SELECT message_id, sender_id, sender_username, recipient_id, recipient_username,
@@ -137,6 +154,7 @@ std::optional<Message> LocalStore::get_message(const std::string& message_id) {
     return m;
 }
 
+//list all messages in db, as long as there is more
 std::vector<Message> LocalStore::list_messages() {
     const char* sql = R"(
         SELECT message_id, sender_id, sender_username, recipient_id, recipient_username,
@@ -156,6 +174,7 @@ std::vector<Message> LocalStore::list_messages() {
         throw LocalStoreError(std::string("list_messages: ") + sqlite3_errmsg(db_));
     return result;
 }
+
 
 void LocalStore::mark_deleted(const std::string& message_id) {
     const char* sql = "UPDATE messages SET deleted = 1 WHERE message_id = ?";
