@@ -197,7 +197,16 @@ int Client::confirm_rotation(std::string_view username) {
     std::cout << "rotating pinned key for " << name << ":\n"
               << "  old: " << TrustStore::fingerprint(pin->public_key) << "\n"
               << "  new: " << TrustStore::fingerprint(fetched.public_key) << "\n"
-              << "only proceed if you have verified the new fingerprint out-of-band.\n";
+              << "only proceed if you have verified the new fingerprint out-of-band.\n"
+              << "overwrite the pin? [y/N]: " << std::flush;
+
+    std::string answer;
+    if (!std::getline(std::cin, answer) ||
+        (answer != "y" && answer != "Y" && answer != "yes" && answer != "Yes")) {
+        std::cout << "rotation cancelled — pin unchanged\n";
+        return 1;
+    }
+
     store_.save_pin(fetched);
     std::cout << "pin overwritten for " << name << "\n";
     return 0;
