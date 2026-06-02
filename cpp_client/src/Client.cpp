@@ -202,12 +202,12 @@ int Client::send_message(std::string_view recipient_username, std::string_view p
     return 0;
 }
 
-int Client::sync() {
-    if (!logged_in_) { std::cerr << "not logged in\n"; return 1; }
+int Client::sync(bool announce) {
+    if (!logged_in_) { if (announce) std::cerr << "not logged in\n"; return 1; }
 
     HttpResponse resp = http_.get("/api/messages?box=inbox");
     if (resp.status_code != 200) {
-        std::cerr << "inbox failed (" << resp.status_code << "): " << resp.body << "\n";
+        if (announce) std::cerr << "inbox failed (" << resp.status_code << "): " << resp.body << "\n";
         return 1;
     }
 
@@ -220,7 +220,8 @@ int Client::sync() {
         try {
             m = Message::from_json(msg_j.dump());
         } catch (const std::exception& e) {
-            std::cerr << "skip (bad json): " << e.what() << "\n"; ++skipped; continue;
+            if (announce) std::cerr << "skip (bad json): " << e.what() << "\n";
+            ++skipped; continue;
         }
 
         // lookup sender's pk (TOFU), cached per call
@@ -233,13 +234,14 @@ int Client::sync() {
                 sender = lookup_user(m.sender_username);
                 sender_cache.emplace(m.sender_username, sender);
             } catch (const std::exception& e) {
-                std::cerr << "skip " << m.message_id << " (sender lookup): " << e.what() << "\n";
+                if (announce) std::cerr << "skip " << m.message_id << " (sender lookup): " << e.what() << "\n";
                 ++skipped; continue;
             }
         }
 
         if (m.encapsulated_key.size() != crypto_kx_PUBLICKEYBYTES) {
-            std::cerr << "skip " << m.message_id << " (bad enc size)\n"; ++skipped; continue;
+            if (announce) std::cerr << "skip " << m.message_id << " (bad enc size)\n";
+            ++skipped; continue;
         }
         PublicKey enc{};
         std::copy(m.encapsulated_key.begin(), m.encapsulated_key.end(), enc.begin());
@@ -251,7 +253,7 @@ int Client::sync() {
             m.plaintext = std::string(pt.begin(), pt.end());
             m.signature_verified = true;
         } catch (const std::exception& e) {
-            std::cerr << "skip " << m.message_id << " (open failed): " << e.what() << "\n";
+            if (announce) std::cerr << "skip " << m.message_id << " (open failed): " << e.what() << "\n";
             ++skipped; continue;
         }
 
@@ -261,8 +263,9 @@ int Client::sync() {
         }
         store_.save_message(m);
         ++saved;
-        std::cout << "  [" << m.message_id << "] from " << m.sender_username
-                  << " " << ms_to_iso(m.sent_at_ms) << "\n";
+        if (announce)
+            std::cout << "  [" << m.message_id << "] from " << m.sender_username
+                      << " " << ms_to_iso(m.sent_at_ms) << "\n";
     }
 
     // reconcile revocations: a message we already cached may since have been
@@ -283,14 +286,15 @@ int Client::sync() {
                 }
             }
         } catch (const std::exception& e) {
-            std::cerr << "revocation sync skipped: " << e.what() << "\n";
+            if (announce) std::cerr << "revocation sync skipped: " << e.what() << "\n";
         }
     } else {
-        std::cerr << "revocation sync failed (" << rev.status_code << ")\n";
+        if (announce) std::cerr << "revocation sync failed (" << rev.status_code << ")\n";
     }
 
-    std::cout << "inbox: " << saved << " new, " << revoked << " revoked, "
-              << skipped << " skipped\n";
+    if (announce)
+        std::cout << "inbox: " << saved << " new, " << revoked << " revoked, "
+                  << skipped << " skipped\n";
     return 0;
 }
 
@@ -437,17 +441,19 @@ std::vector<Message> Client::list_thread(const std::string& peer) {
     return thread;
 }
 
+std::string Client::format_thread_line(std::size_t index, const Message& m) const {
+    const bool from_me = (m.sender_username == username_);
+    return std::to_string(index) + ". ["
+         + (from_me ? std::string("you") : m.sender_username)
+         + " " + ms_to_iso(m.sent_at_ms) + "] "
+         + (m.revoked ? std::string("(message revoked)") : m.plaintext);
+}
+
 std::vector<Message> Client::print_thread(const std::string& peer) {
     auto thread = list_thread(peer);
     std::cout << "── chat with " << peer << " ──\n";
     if (thread.empty()) { std::cout << "(no messages yet)\n"; return thread; }
-    for (size_t i = 0; i < thread.size(); ++i) {
-        const Message& m = thread[i];
-        const bool from_me = (m.sender_username == username_);
-        std::cout << (i + 1) << ". "
-                  << "[" << (from_me ? std::string("you") : m.sender_username)
-                  << " " << ms_to_iso(m.sent_at_ms) << "] "
-                  << (m.revoked ? "(message revoked)" : m.plaintext) << "\n";
-    }
+    for (std::size_t i = 0; i < thread.size(); ++i)
+        std::cout << format_thread_line(i + 1, thread[i]) << "\n";
     return thread;
 }

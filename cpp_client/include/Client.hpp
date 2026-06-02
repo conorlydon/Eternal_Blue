@@ -28,7 +28,9 @@ public:
     int logout();
 
     int send_message(std::string_view recipient_username, std::string_view plaintext);
-    int sync();                                        // pull + decrypt + persist new messages
+    // pull + decrypt + persist new messages, then reconcile revocations.
+    // announce=false silences all output (used by the chat-mode background poll).
+    int sync(bool announce = true);
     int read_message(std::string_view message_id);
     int delete_message(std::string_view message_id);
     int revoke_message(std::string_view message_id);   // sender recalls a message for both sides
@@ -41,6 +43,9 @@ public:
     // prints the thread with 1-based indices and returns it so the caller can
     // map an index back to a message_id (used by chat-mode /delete and /forward)
     std::vector<Message>     print_thread(const std::string& peer);
+    // one rendered thread line ("<n>. [<who> <iso>] <body>"), no trailing
+    // newline; shared by print_thread and the chat-mode incremental renderer
+    std::string              format_thread_line(std::size_t index, const Message& m) const;
 
     bool logged_in() const { return logged_in_; }
     const std::string& current_username() const { return username_; }
