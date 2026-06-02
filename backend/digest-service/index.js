@@ -19,15 +19,18 @@ const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL)
 const wallet   = new ethers.Wallet(process.env.WALLET_PRIVATE_KEY, provider)
 const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, CONTRACT_ABI, wallet)
 
-export async function onMessageSent(messageId, ciphertext) {
-  const digest = ethers.keccak256(Buffer.from(ciphertext, 'base64'))
-  await pool.query(
-    `INSERT INTO digest_queue (message_id, digest)
-     VALUES ($1, $2)`,
-    [messageId, digest]
-  )
-  console.log(`Queued digest for message ${messageId}`)
-}
+// onMessageSent was an early design where this service would queue digests
+// itself. Digest queuing now happens inside the messages.js POST handler
+// (same DB transaction as the message insert) so this function is never
+// called. Kept here for reference; the active path is messages.js:77-81.
+//
+// export async function onMessageSent(messageId, ciphertext) {
+//   const digest = ethers.keccak256(Buffer.from(ciphertext, 'base64'))
+//   await pool.query(
+//     `INSERT INTO digest_queue (message_id, digest) VALUES ($1, $2)`,
+//     [messageId, digest]
+//   )
+// }
 
 async function flushWithRetry(rows, attempt = 1) {
   const MAX_ATTEMPTS = 5

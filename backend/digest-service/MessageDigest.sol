@@ -5,6 +5,13 @@ contract MessageDigest {
     event DigestRecorded(bytes32 indexed batchHash, uint256 timestamp);
 
     address public immutable owner;
+
+    // `batches` stores every batch hash by sequential index on-chain so they
+    // can be enumerated via eth_call without replaying event logs.
+    // The `DigestRecorded` event (below) marks batchHash as `indexed` so it
+    // appears in topics[1] of the tx receipt — this is what the verification
+    // page reads to confirm the hash without trusting the app server's DB.
+    // Both routes reach the same on-chain value; they serve different callers.
     mapping(uint256 => bytes32) public batches;
     uint256 public batchCount;
 

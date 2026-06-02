@@ -182,6 +182,9 @@
     <label for="ciphertext">Ciphertext</label>
     <textarea id="ciphertext" placeholder="Paste the original base64-encoded ciphertext here"></textarea>
 
+    <label for="tx-hash">Transaction hash <span style="font-weight:400;color:#888">(optional — leave blank to use server record)</span></label>
+    <input type="text" id="tx-hash" placeholder="e.g. 0xabc123... — supply this yourself for fully independent verification" />
+
     <button id="verify-btn">Verify message</button>
 
     <div class="error-msg" id="error-msg"></div>
@@ -247,12 +250,13 @@
     document.getElementById('verify-btn').addEventListener('click', verify)
 
     async function verify() {
-      const messageId  = document.getElementById('message-id').value.trim()
-      const ciphertext = document.getElementById('ciphertext').value.trim()
-      const errorEl    = document.getElementById('error-msg')
-      const spinner    = document.getElementById('spinner')
-      const resultEl   = document.getElementById('result')
-      const btn        = document.getElementById('verify-btn')
+      const messageId       = document.getElementById('message-id').value.trim()
+      const ciphertext      = document.getElementById('ciphertext').value.trim()
+      const userSuppliedTx  = document.getElementById('tx-hash').value.trim()
+      const errorEl         = document.getElementById('error-msg')
+      const spinner         = document.getElementById('spinner')
+      const resultEl        = document.getElementById('result')
+      const btn             = document.getElementById('verify-btn')
 
       errorEl.style.display  = 'none'
       resultEl.style.display = 'none'
@@ -295,8 +299,11 @@
 
         // 5. fetch the on-chain batch hash via our backend proxy
         //    (direct browser calls to public Sepolia RPCs are blocked by CORS)
+        //    If the user supplied their own tx hash, use that instead of the
+        //    server's value — this makes the check independent of the server DB.
+        const txHashToQuery = userSuppliedTx || data.tx_hash
         spinner.textContent = 'Querying Sepolia blockchain...'
-        const txRes  = await fetch(`${API_BASE}/api/blockchain/tx/${data.tx_hash}`)
+        const txRes  = await fetch(`${API_BASE}/api/blockchain/tx/${txHashToQuery}`)
         const txData = await txRes.json()
         if (!txRes.ok) throw new Error(txData.message || 'Failed to fetch on-chain transaction')
 
@@ -326,7 +333,7 @@
         document.getElementById('out-chain-status').textContent  = chainVerified
           ? '✓ on-chain batch hash matches recomputed hash'
           : '✗ mismatch — server may have returned a fraudulent tx_hash'
-        document.getElementById('out-tx').textContent            = data.tx_hash
+        document.getElementById('out-tx').textContent            = txHashToQuery + (userSuppliedTx ? ' (user-supplied)' : '')
         document.getElementById('out-block').textContent         = data.block_number
         document.getElementById('out-time').textContent          = new Date(data.recorded_at).toUTCString()
         document.getElementById('out-etherscan').innerHTML       =

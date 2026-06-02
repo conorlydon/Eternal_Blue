@@ -256,7 +256,7 @@ To address all issues (including breaking changes), run:
 npm audit fix \--force
 
 **Mitigation:**  
-npm audit fix was run to resolve all automatically fixable vulnerabilities. Any remaining issues are documented above with justification. Dependencies are kept up to date and pinned to specific versions in package.json.
+npm audit fix was run to resolve all automatically fixable vulnerabilities. The remaining `ws` finding cannot be resolved automatically: the suggested fix (`npm audit fix --force`) would *downgrade* ethers from v6 to v5 — a breaking change that would require rewriting the digest service and verification page (ethers v5 uses a different API: `ethers.utils.keccak256`, `ethers.utils.toUtf8Bytes`, different `JsonRpcProvider` constructor). The risk is assessed as minimal: the uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) requires an attacker to control WebSocket frame payloads sent *to* our process. The digest service only initiates outbound connections to the Sepolia RPC endpoint; it never accepts inbound WebSocket connections, so this attack vector does not apply to our deployment.
 
 ---
 
@@ -279,7 +279,7 @@ npm audit fix was run to resolve all automatically fixable vulnerabilities. Any 
 
      
 * **sqlmap SSL connectivity:** sqlmap was initially unable to establish an SSL connection due to the shared proxy infrastructure's SNI handling. This was resolved by adding \--force-ssl and an explicit Host header. Future testing should note this requirement.  
-* **npm audit ws vulnerability:** Moderate severity vulnerability in ws (transitive dependency of ethers v6). Not fixed as the breaking change would disable the blockchain integration. Risk assessed as minimal given deployment context.
+* **npm audit ws vulnerability:** Moderate severity vulnerability in ws (transitive dependency of ethers v6). The fix would downgrade ethers v6 → v5, a breaking change requiring rewrite of the digest service and verification page. Risk is minimal because the exploit requires control of inbound WebSocket frames; the digest service only makes outbound connections and accepts no inbound WebSocket traffic.
 
 ---
 
