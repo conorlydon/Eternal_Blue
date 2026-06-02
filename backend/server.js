@@ -23,6 +23,10 @@ import { fileURLToPath } from 'node:url'
 const useTls = process.env.TLS_CERT && process.env.TLS_KEY
 const app = Fastify({
   logger: true,
+  // Behind nginx, the socket peer is always the proxy. Trust X-Forwarded-For so
+  // req.ip reflects the real client (needed for IP-keyed limits on login/register,
+  // which have no token to key on). See nginx note below — the proxy must set XFF.
+  trustProxy: true,
   ...(useTls && {
     https: {
       key:  fs.readFileSync(process.env.TLS_KEY),
@@ -55,15 +59,35 @@ await app.register(helmet, {
   noSniff: true,
 })
 
-// rate limiting
-await app.register(rateLimit, {
-  max: 100,
-  timeWindow: '1 minute'
-})
-
-// jwt
+// jwt — registered before the rate limiter so its keyGenerator can verify tokens
 await app.register(jwt, {
   secret: process.env.JWT_SECRET
+})
+
+// rate limiting — key by the authenticated user when a valid bearer token is
+// present, otherwise fall back to client IP. This is what makes limiting work
+// behind nginx: authenticated traffic is bucketed per user (the proxy's shared
+// IP no longer collapses everyone into one bucket), while unauthenticated routes
+// (login/register) stay IP-keyed via trustProxy + X-Forwarded-For.
+//
+// The limiter's onRequest hook runs before route-level app.authenticate, so
+// req.user isn't set yet here — we verify the token ourselves. A bad/expired
+// token falls through to IP so it can't be used to dodge the limit.
+await app.register(rateLimit, {
+  max: 100,
+  timeWindow: '1 minute',
+  keyGenerator: (req) => {
+    const auth = req.headers.authorization
+    if (auth && auth.startsWith('Bearer ')) {
+      try {
+        const { user_id } = app.jwt.verify(auth.slice(7))
+        return `user:${user_id}`
+      } catch {
+        // invalid/expired — fall through to IP
+      }
+    }
+    return req.ip
+  }
 })
 
 // auth decorator — add to any route with onRequest: [app.authenticate]

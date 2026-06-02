@@ -13,7 +13,7 @@ End-to-end encrypted messaging with HPKE Mode_Auth (libsodium), Argon2id key der
 
 ## Verification Page
 
-`https://eternal-blue.theburkenator.com/verification/index.html`
+`https://eternal-blue.theburkenator.com/verify/index.html`
 
 Paste a message ID and its base64-encoded ciphertext to verify the message has not been tampered with. The page:
 1. Computes `keccak256(ciphertext)` locally
