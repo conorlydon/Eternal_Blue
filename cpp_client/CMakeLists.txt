@@ -44,8 +44,7 @@ add_library(eternal-blue-core OBJECT
     src/TrustStore.cpp 
     src/LocalStore.cpp 
     src/User.cpp 
-    src/Message.cpp 
-    src/Conversation.cpp 
+    src/Message.cpp
     src/Client.cpp
 )
 
