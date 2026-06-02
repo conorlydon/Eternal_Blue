@@ -159,6 +159,50 @@ User Client::lookup_user(const std::string& username) {
     return trust_.lookup_or_pin(u);
 }
 
+int Client::print_fingerprint(std::string_view username) {
+    auto pin = store_.get_pin(std::string(username));
+    if (!pin) {
+        std::cout << "no pinned key for " << username
+                  << " yet — exchange a message first, then re-check\n";
+        return 1;
+    }
+    std::cout << "pinned key fingerprint for " << username << ":\n  "
+              << TrustStore::fingerprint(pin->public_key) << "\n"
+              << "compare this out-of-band (call / in person) against " << username
+              << "'s own copy\n";
+    return 0;
+}
+
+int Client::confirm_rotation(std::string_view username) {
+    std::string name(username);
+    // fetch directly, bypassing lookup_user's TOFU check, which would just re-throw
+    HttpResponse resp = http_.get("/api/keys/" + name);
+    if (resp.status_code != 200) {
+        std::cerr << "lookup '" << name << "' failed (" << resp.status_code << "): " << resp.body << "\n";
+        return 1;
+    }
+    User fetched = User::from_json(resp.body);
+
+    auto pin = store_.get_pin(name);
+    if (!pin) {
+        store_.save_pin(fetched);
+        std::cout << "pinned " << name << " (no previous pin):\n  "
+                  << TrustStore::fingerprint(fetched.public_key) << "\n";
+        return 0;
+    }
+    if (pin->public_key == fetched.public_key) {
+        std::cout << "no rotation needed — the pinned key already matches the server\n";
+        return 0;
+    }
+    std::cout << "rotating pinned key for " << name << ":\n"
+              << "  old: " << TrustStore::fingerprint(pin->public_key) << "\n"
+              << "  new: " << TrustStore::fingerprint(fetched.public_key) << "\n"
+              << "only proceed if you have verified the new fingerprint out-of-band.\n";
+    store_.save_pin(fetched);
+    std::cout << "pin overwritten for " << name << "\n";
+    return 0;
+}
+
 int Client::send_message(std::string_view recipient_username, std::string_view plaintext) {
     if (!logged_in_) { std::cerr << "not logged in\n"; return 1; }
 

@@ -101,9 +101,9 @@ static Message row_to_message(sqlite3_stmt* stmt) {
 }
 
 void LocalStore::save_message(const Message& m) {
-    //sql template: ?==pllaceholder, 0 as new message never deleted
+    // IGNORE not REPLACE so re-saving never resurrects a locally deleted/revoked row
     const char* sql = R"(
-        INSERT OR REPLACE INTO messages
+        INSERT OR IGNORE INTO messages
             (message_id, sender_id, sender_username, recipient_id, recipient_username,
              encapsulated_key, ciphertext, sent_at_ms, is_forwarded, original_message_id,
              plaintext, signature_verified, deleted)

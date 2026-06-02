@@ -36,6 +36,10 @@ public:
     int revoke_message(std::string_view message_id);   // sender recalls a message for both sides
     int forward_message(std::string_view message_id, std::string_view recipient_username);
 
+    // trust management (TOFU pins)
+    int print_fingerprint(std::string_view username);   // sha-256 of the pinned key, for OOB compare
+    int confirm_rotation(std::string_view username);    // explicitly re-pin to the server's current key
+
     // navigation (LocalStore-backed; no server round-trip)
     std::vector<ConvSummary> list_conversations();
     void                     print_conversations();

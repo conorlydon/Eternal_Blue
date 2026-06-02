@@ -69,6 +69,8 @@ void print_help() {
         "  conversations                   list peers grouped by last activity (alias: convos)\n"
         "  chat <username>                 open a conversation (message actions live here)\n"
         "  send <username> <text...>       one-shot send without entering chat mode\n"
+        "  fingerprint <username>          print the pinned key fingerprint (verify out-of-band)\n"
+        "  trust <username> --confirm-rotation   re-pin after a verified key change\n"
         "  health                          check server reachability\n"
         "  help                            this message\n"
         "  quit                            exit\n"
@@ -273,6 +275,17 @@ void run_repl(Client& client) {
                 if (!client.logged_in()) { std::cerr << "not logged in\n"; continue; }
                 if (args.size() < 2) { std::cerr << "usage: chat <username>\n"; continue; }
                 run_chat(client, args[1]);
+            }
+            else if (cmd == "fingerprint") {
+                if (args.size() < 2) { std::cerr << "usage: fingerprint <username>\n"; continue; }
+                client.print_fingerprint(args[1]);
+            }
+            else if (cmd == "trust") {
+                if (args.size() < 3 || args[2] != "--confirm-rotation") {
+                    std::cerr << "usage: trust <username> --confirm-rotation\n";
+                    continue;
+                }
+                client.confirm_rotation(args[1]);
             }
             else std::cerr << "unknown command: " << cmd
                            << " (try 'help'; message actions live inside 'chat <user>')\n";
