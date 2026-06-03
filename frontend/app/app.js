@@ -1,7 +1,4 @@
-import { CipherSuite, DhkemX25519HkdfSha256, HkdfSha256 }
-  from '/lib/hpke.bundle.js'
-import { Chacha20Poly1305 }
-  from '/lib/hpke.bundle.js'
+import { CipherSuite, DhkemX25519HkdfSha256, HkdfSha256, Chacha20Poly1305 } from '/lib/hpke.bundle.js'
 
 const API = '/api'
 const HPKE_INFO = new TextEncoder().encode('eternal-blue-msg-v1')
@@ -16,10 +13,11 @@ const S = {
   forwardTargetMsgId: null,
 }
 
-// Decrypted plaintext keyed by message_id — never put message content into HTML attributes
+// Decrypted plaintext keyed by message_id - never put message content into HTML attributes
 const plaintextCache = new Map()
 
-// ── HPKE suite ────────────────────────────────────────────────────────────
+// Builds the HPKE cipher suite used for every encrypt/decrypt:
+// X25519 KEM + HKDF-SHA256 KDF + ChaCha20-Poly1305 AEAD.
 function makeSuite() {
   return new CipherSuite({
     kem:  new DhkemX25519HkdfSha256(),
@@ -28,18 +26,21 @@ function makeSuite() {
   })
 }
 
-// ── Base64url helpers ─────────────────────────────────────────────────────
+// Base64url helpers (URL-safe, unpadded) for shipping binary keys/ciphertext as JSON.
+// bytes -> base64url string
 function toB64u(buf) {
   return btoa(String.fromCharCode(...new Uint8Array(buf)))
     .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'')
 }
+// base64url string -> Uint8Array (re-adds the stripped '=' padding first)
 function fromB64u(str) {
   const b64 = str.replace(/-/g,'+').replace(/_/g,'/')
   const pad = b64 + '='.repeat((4 - b64.length % 4) % 4)
   return Uint8Array.from(atob(pad), c => c.charCodeAt(0))
 }
 
-// ── PBKDF2 key wrapping ───────────────────────────────────────────────────
+// Derives an AES-GCM key from the user's password to wrap/unwrap the private key.
+// 600k PBKDF2 iterations - deliberately slow to make offline brute-force of a stolen wrapped key expensive.
 async function derivePbkdf2Key(password, salt) {
   const raw = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
@@ -52,6 +53,7 @@ async function derivePbkdf2Key(password, salt) {
   )
 }
 
+// Wraps (encrypts) the private key under the password — fresh random salt+iv each call.
 async function encryptPrivKey(privKeyBytes, password) {
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const iv   = crypto.getRandomValues(new Uint8Array(12))
@@ -60,13 +62,15 @@ async function encryptPrivKey(privKeyBytes, password) {
   return { salt, iv, ct: new Uint8Array(ct) }
 }
 
+// Unwraps the private key; throws on wrong password or tampered ciphertext (GCM auth tag).
 async function decryptPrivKey(salt, iv, ct, password) {
   const key = await derivePbkdf2Key(password, salt)
   const pt  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
   return new Uint8Array(pt)
 }
 
-// ── Local key store ───────────────────────────────────────────────────────
+// Local key store - public key + password-wrapped private key live in localStorage, keyed by username.
+// Persists this device's key blob for a user.
 function saveKeyStore(username, pubBytes, wrapped) {
   localStorage.setItem(`eb_key:${username}`, JSON.stringify({
     pub:  toB64u(pubBytes),
@@ -76,6 +80,7 @@ function saveKeyStore(username, pubBytes, wrapped) {
   }))
 }
 
+// Reads back this device's stored key blob, or null if the user never registered/logged in here.
 function loadKeyStore(username) {
   const raw = localStorage.getItem(`eb_key:${username}`)
   if (!raw) return null
@@ -83,13 +88,15 @@ function loadKeyStore(username) {
   return { pub: fromB64u(d.pub), salt: fromB64u(d.salt), iv: fromB64u(d.iv), ct: fromB64u(d.ct) }
 }
 
-// ── TOFU pinning ──────────────────────────────────────────────────────────
+// Trust-On-First-Use pinning - remembers each peer's public key so a later swap is detectable.
+// Records (or overwrites) the pinned key for a peer.
 function pinKey(username, pubBytes, keyVersion) {
   const store = JSON.parse(localStorage.getItem('eb_tofu') || '{}')
   store[username] = { pub: toB64u(pubBytes), kv: keyVersion, at: new Date().toISOString() }
   localStorage.setItem('eb_tofu', JSON.stringify(store))
 }
 
+// Returns the previously pinned key for a peer, or null if never seen.
 function getPinnedKey(username) {
   const store = JSON.parse(localStorage.getItem('eb_tofu') || '{}')
   const e = store[username]
@@ -97,6 +104,8 @@ function getPinnedKey(username) {
   return { pub: fromB64u(e.pub), kv: e.kv, at: e.at }
 }
 
+// Fetches a peer's public key from the server and re-pins it.
+// returns warned=true when the fetched key differs from the pinned one - a key rotation or a possible MITM/server key-swap. Caller decides how to surface it.
 async function fetchPeerKey(username) {
   let data
   try {
@@ -116,7 +125,10 @@ async function fetchPeerKey(username) {
   return { pubKey, userId: data.user_id, warned }
 }
 
-// ── HPKE encrypt ──────────────────────────────────────────────────────────
+// Encrypts plaintext for a recipient using HPKE in authenticated mode (senderKey set),
+// so the recipient can cryptographically verify it came from us.
+// binds sender|recipient|timestamp as AAD — ties the ciphertext to its context so it
+// can't be replayed or passed off as a different message.
 async function hpkeEncrypt(plaintext, recipientUsername) {
   const { pubKey: recipPubKey, userId: recipId, warned } = await fetchPeerKey(recipientUsername)
   const sentAtMs = Date.now()
@@ -138,7 +150,9 @@ async function hpkeEncrypt(plaintext, recipientUsername) {
   }
 }
 
-// ── HPKE decrypt ──────────────────────────────────────────────────────────
+// Decrypts an incoming message and authenticates the sender (rebuilds the same AAD).
+// prefers the pinned sender key over re-fetching, so a server that swaps a sender's
+// key can't silently forge messages - a mismatch instead causes decryption to fail.
 async function hpkeDecrypt(msg) {
   const enc      = fromB64u(msg.encapsulated_key)
   const ct       = fromB64u(msg.ciphertext)
@@ -168,20 +182,22 @@ async function hpkeDecrypt(msg) {
   return new TextDecoder().decode(plain)
 }
 
-// ── Sent message cache ────────────────────────────────────────────────────
+// Sent-message cache. messages we send are encrypted to the recipient, not to us, so we
+// literally cannot decrypt our own sent ciphertext later - we keep a local plaintext copy instead.
 function cacheSentMsg(messageId, plaintext, recipientUsername) {
   const store = JSON.parse(localStorage.getItem('eb_sent') || '{}')
   store[messageId] = { t: plaintext, r: recipientUsername, ts: Date.now() }
   localStorage.setItem('eb_sent', JSON.stringify(store))
 }
 
+// Returns our locally-cached outgoing plaintext for a message, or null (e.g. sent from another device).
 function getCachedSentMsg(messageId) {
   const store = JSON.parse(localStorage.getItem('eb_sent') || '{}')
   return store[messageId] || null
 }
 
-// ── API helper ────────────────────────────────────────────────────────────
-// Maps HTTP status codes to safe user-facing messages — never surfaces raw
+// API helper
+// Maps HTTP status codes to safe user-facing messages - never surfaces raw
 // backend strings, which can expose internal schema, access-control logic, etc.
 const API_ERRORS = {
   400: 'Invalid request.',
@@ -192,6 +208,8 @@ const API_ERRORS = {
   429: 'Too many attempts. Please wait a moment and try again.',
 }
 
+// Single JSON fetch wrapper: attaches the bearer token, parses JSON, and on a 401 for an
+// authenticated call forces logout (expired/invalid session).
 async function api(method, path, body, auth = true) {
   const headers = {}
   if (body) headers['Content-Type'] = 'application/json'
@@ -209,7 +227,7 @@ async function api(method, path, body, auth = true) {
   }
 
   if (!res.ok) {
-    // Expired or invalid token on an authenticated call — force re-login
+    // Expired or invalid token on an authenticated call - force re-login
     if (auth && res.status === 401) {
       doLogout()
       throw new Error('Your session has expired. Please log in again.')
@@ -219,7 +237,9 @@ async function api(method, path, body, auth = true) {
   return data
 }
 
-// ── Auth flows ────────────────────────────────────────────────────────────
+// Logs in, then unwraps the private key locally with the password.
+// if this device has no local key, it falls back to the server-stored *wrapped* key
+// (cross-device login) - the server only ever holds the encrypted blob, never the raw key.
 async function doLogin() {
   const username = id('l-user').value.trim()
   const password = id('l-pass').value
@@ -270,6 +290,8 @@ async function doLogin() {
   }
 }
 
+// Generates a fresh keypair, wraps the private key under the password, registers, then logs in.
+// the private key is wrapped client-side before upload — the server stores only ciphertext.
 async function doRegister() {
   const username = id('r-user').value.trim()
   const password = id('r-pass').value
@@ -317,7 +339,7 @@ async function doRegister() {
   }
 }
 
-// ── Password management ───────────────────────────────────────────────────
+// Opens the change-password modal (clearing any stale field values).
 function openChangePassModal() {
   id('cp-current').value = ''
   id('cp-new').value     = ''
@@ -326,10 +348,14 @@ function openChangePassModal() {
   id('change-pass-modal').hidden = false
 }
 
+// Closes the change-password modal.
 function closeChangePassModal() {
   id('change-pass-modal').hidden = true
 }
 
+// Changes the password by re-wrapping the in-memory private key under the new one.
+// the keypair itself never changes — only the password wrapper — so existing pinned keys
+// and past messages stay valid. Server updates the hash + wrapped blob in a single call.
 async function doChangePassword() {
   const currentPass = id('cp-current').value
   const newPass     = id('cp-new').value
@@ -376,6 +402,7 @@ async function doChangePassword() {
   }
 }
 
+// Wipes all in-memory secrets and the decrypted-plaintext cache, then returns to the login screen.
 function doLogout() {
   plaintextCache.clear()
   S.token = null; S.userId = null; S.username = null
@@ -387,7 +414,7 @@ function doLogout() {
   id('login-err').style.display = 'none'
 }
 
-// ── App shell ─────────────────────────────────────────────────────────────
+// Swaps from the auth screen to the main app shell and loads the conversation list.
 function showApp() {
   id('auth').style.display = 'none'
   id('app').style.display  = 'flex'
@@ -395,6 +422,7 @@ function showApp() {
   loadConversations()
 }
 
+// Fetches and renders the conversation sidebar list.
 async function loadConversations() {
   const listEl = id('conv-list')
   listEl.innerHTML = '<div class="loading-row"><span class="spinner"></span> Loading…</div>'
@@ -406,6 +434,7 @@ async function loadConversations() {
   }
 }
 
+// Renders the conversation list HTML. All peer-supplied fields go through esc() to prevent XSS.
 function renderConvList(convs) {
   const listEl = id('conv-list')
   if (!convs.length) {
@@ -433,6 +462,7 @@ function renderConvList(convs) {
   }).join('')
 }
 
+// Opens a conversation: loads its messages, marks them read, and refreshes the sidebar.
 async function openConv(convId, peerUsername) {
   S.currentConvId = convId
   S.currentPeer   = peerUsername
@@ -457,6 +487,10 @@ async function openConv(convId, peerUsername) {
   }
 }
 
+// Builds the HTML for one message bubble. Incoming messages are decrypted; our own use the local
+// sent-cache (we can't decrypt what we sent). Decrypted text is cached for download/forward, and a
+// decryption failure renders an error bubble rather than throwing. Action buttons carry only msg-ids,
+// never plaintext, in data attributes.
 async function buildMsgHtml(msg) {
   const mine = msg.sender_username === S.username
   let plaintext
@@ -515,6 +549,7 @@ async function buildMsgHtml(msg) {
   `
 }
 
+// Decrypts and renders a batch of messages in order, then scrolls to the newest.
 async function renderMessages(msgs) {
   const area = id('messages-area')
   if (!msgs.length) {
@@ -532,19 +567,24 @@ async function renderMessages(msgs) {
   area.scrollTop = area.scrollHeight
 }
 
-// ── Auto-refresh polling ──────────────────────────────────────────────────
+// Auto-refresh polling
 let pollTimer = null
 
+// Starts polling the open conversation for new messages every 3s.
 function startPolling() {
   stopPolling()
   pollTimer = setInterval(pollNewMessages, 3000)
 }
 
+// Stops the polling timer.
 function stopPolling() {
   clearInterval(pollTimer)
   pollTimer = null
 }
 
+// Poll tick: appends only messages not already in the DOM.
+// re-checks S.currentConvId after each await so a conversation switched mid-request
+// (or mid-decrypt) doesn't leak the previous chat's messages into the new view.
 async function pollNewMessages() {
   if (!S.currentConvId) return
   const convId = S.currentConvId
@@ -578,7 +618,8 @@ async function pollNewMessages() {
   }
 }
 
-// ── Send ──────────────────────────────────────────────────────────────────
+// Encrypts and sends the composed message, caches our plaintext copy, then refreshes the view.
+// Surfaces a TOFU warning toast if the recipient's key changed since last contact.
 async function doSend() {
   const input = id('compose-input')
   const text  = input.value.trim()
@@ -613,7 +654,7 @@ async function doSend() {
   }
 }
 
-// ── Message actions ───────────────────────────────────────────────────────
+// Deletes a message (server-side) and drops its cached plaintext + bubble.
 async function doDelete(msgId) {
   try {
     await api('DELETE', `/messages/${msgId}`)
@@ -625,6 +666,7 @@ async function doDelete(msgId) {
   }
 }
 
+// Revokes the recipient's access to a message we sent (server-side).
 async function doRevoke(msgId) {
   try {
     await api('DELETE', `/messages/${msgId}/revoke`)
@@ -634,6 +676,7 @@ async function doRevoke(msgId) {
   }
 }
 
+// Saves a decrypted message to a .txt file. Works from the in-memory cache only.
 function doDownload(msgId) {
   const text = plaintextCache.get(msgId)
   if (!text) { toast('Message content not available', true); return }
@@ -648,7 +691,7 @@ function doDownload(msgId) {
   URL.revokeObjectURL(url)
 }
 
-// ── Forward ───────────────────────────────────────────────────────────────
+// Opens the forward modal, remembering which message is being forwarded.
 function openForwardModal(msgId) {
   S.forwardTargetMsgId = msgId
   id('fwd-user').value = ''
@@ -656,11 +699,15 @@ function openForwardModal(msgId) {
   id('forward-modal').hidden = false
 }
 
+// Closes the forward modal and clears the forward target.
 function closeForwardModal() {
   id('forward-modal').hidden = true
   S.forwardTargetMsgId = null
 }
 
+// Forwards a message by *re-encrypting* its cached plaintext to a new recipient.
+// forwarding is a fresh HPKE encryption, not a relay of the original ciphertext -
+// the original was encrypted to us, so it can't simply be passed along.
 async function doForward() {
   const targetUser = id('fwd-user').value.trim()
   const errEl      = id('fwd-err')
@@ -686,17 +733,20 @@ async function doForward() {
   }
 }
 
-// ── New conversation ──────────────────────────────────────────────────────
+// Opens the new-conversation modal.
 function openNewConvModal() {
   id('new-conv-user').value = ''
   id('new-conv-err').style.display = 'none'
   id('new-conv-modal').hidden = false
 }
 
+// Closes the new-conversation modal.
 function closeNewConvModal() {
   id('new-conv-modal').hidden = true
 }
 
+// Starts a new conversation: fetches the peer's key (triggering the TOFU check) and opens an
+// empty chat view. Reuses the existing thread if one is already in the sidebar.
 async function startNewConv() {
   const username = id('new-conv-user').value.trim()
   const errEl    = id('new-conv-err')
@@ -726,9 +776,11 @@ async function startNewConv() {
   }
 }
 
-// ── UI helpers ────────────────────────────────────────────────────────────
+// UI helpers
+// Shorthand for document.getElementById.
 function id(x) { return document.getElementById(x) }
 
+// HTML-escapes a string — the app's primary XSS defense when injecting user content via innerHTML.
 function esc(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -737,8 +789,10 @@ function esc(s) {
     .replace(/"/g, '&quot;')
 }
 
+// Shows an inline error message in the given element.
 function showErr(el, msg) { el.textContent = msg; el.style.display = 'block' }
 
+// Shows a transient toast notification (auto-hides after 3s); isErr styles it as an error.
 let toastTimer
 function toast(msg, isErr = false) {
   const el = id('toast')
@@ -749,6 +803,7 @@ function toast(msg, isErr = false) {
   toastTimer = setTimeout(() => { el.style.display = 'none' }, 3000)
 }
 
+// Formats a date as a relative "just now / 5m ago / 3h ago", falling back to a date string.
 function relTime(d) {
   const diff = Date.now() - d.getTime()
   const min  = Math.floor(diff / 60000)
@@ -759,15 +814,18 @@ function relTime(d) {
   return d.toLocaleDateString()
 }
 
+// Formats a date as a short local clock time (HH:MM).
 function fmtTime(d) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+// Grows the compose textarea to fit its content, capped at 120px.
 function autoResize(el) {
   el.style.height = 'auto'
   el.style.height = Math.min(el.scrollHeight, 120) + 'px'
 }
 
+// Toggles the auth screen between the login and register tabs.
 function showTab(tab) {
   id('form-login').style.display    = tab === 'login'    ? 'block' : 'none'
   id('form-register').style.display = tab === 'register' ? 'block' : 'none'
@@ -775,14 +833,14 @@ function showTab(tab) {
   id('tab-register').classList.toggle('active', tab === 'register')
 }
 
-// ── Event delegation: conversation list ──────────────────────────────────
+// Event delegation: conversation list
 id('conv-list').addEventListener('click', e => {
   const item = e.target.closest('.conv-item')
   if (!item) return
   openConv(item.dataset.id, item.dataset.peer)
 })
 
-// ── Event delegation: message actions ────────────────────────────────────
+// Event delegation: message actions
 id('messages-area').addEventListener('click', e => {
   const btn = e.target.closest('[data-action]')
   if (!btn) return
@@ -793,7 +851,7 @@ id('messages-area').addEventListener('click', e => {
   else if (action === 'delete') doDelete(msgId)
 })
 
-// ── Static element listeners ──────────────────────────────────────────────
+// Static element listeners
 id('tab-login').addEventListener('click', () => showTab('login'))
 id('tab-register').addEventListener('click', () => showTab('register'))
 id('login-btn').addEventListener('click', doLogin)
