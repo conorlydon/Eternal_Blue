@@ -1,4 +1,7 @@
-import { CipherSuite, DhkemX25519HkdfSha256, HkdfSha256, Chacha20Poly1305 } from '/lib/hpke.bundle.js'
+import { CipherSuite, DhkemX25519HkdfSha256, HkdfSha256 }
+  from '@hpke/core'
+import { Chacha20Poly1305 }
+  from '@hpke/chacha20poly1305'
 
 const API = '/api'
 const HPKE_INFO = new TextEncoder().encode('eternal-blue-msg-v1')

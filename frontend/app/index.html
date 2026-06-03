@@ -396,6 +396,18 @@
 <!-- ════ TOAST ══════════════════════════════════════════════════════════ -->
 <div id="toast"></div>
 
+<!-- Resolve the npm-installed HPKE library (served from /vendor) for the browser.
+     @hpke/core and @hpke/chacha20poly1305 import @hpke/common internally, so all
+     three bare specifiers are mapped here. No CDN, no bundler. -->
+<script type="importmap">
+{
+  "imports": {
+    "@hpke/core": "/vendor/@hpke/core/esm/mod.js",
+    "@hpke/chacha20poly1305": "/vendor/@hpke/chacha20poly1305/esm/mod.js",
+    "@hpke/common": "/vendor/@hpke/common/esm/mod.js"
+  }
+}
+</script>
 <script type="module" src="/app/app.js"></script>
 </body>
 </html>

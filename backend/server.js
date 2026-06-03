@@ -47,8 +47,10 @@ await app.register(helmet, {
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      // app.js and its HPKE bundle are served from 'self' - no unsafe-inline needed
-      scriptSrc:  ["'self'"],
+      // app.js and the HPKE library are served from 'self' (/vendor). The only inline
+      // script is the import map, allowed by its sha256 hash - no 'unsafe-inline'.
+      // If the import map text in index.html changes, recompute this hash.
+      scriptSrc:  ["'self'", "'sha256-TMKMuhwQvSPejQxV+RsbyUBVIAdRnbuGy23zdMdJMXs='"],
       // no scriptSrcAttr - zero inline event handlers in the HTML
       connectSrc: ["'self'"],
       imgSrc:     ["'self'", "data:"],
@@ -105,6 +107,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 await app.register(staticFiles, {
   root: path.join(__dirname, '../frontend'),
   prefix: '/'
+})
+
+// Serve the npm-installed HPKE library ESM files for the browser import map
+// (frontend/app/index.html). decorateReply:false because @fastify/static is
+// already registered above and the reply decorator can only be added once.
+await app.register(staticFiles, {
+  root: path.join(__dirname, 'node_modules/@hpke'),
+  prefix: '/vendor/@hpke/',
+  decorateReply: false,
 })
 
 // routes
