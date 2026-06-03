@@ -96,7 +96,7 @@
 ## Additional Notes
 
 ### AI Tool Usage
-AI tools (Claude via Claude Code CLI) were used as a development aid throughout the project. All AI-generated code was reviewed, tested, and in several cases manually corrected before committing. A full AI interaction log with prompts, generated output, and critical evaluation is included in the submission as `AI_LOG.md`.
+AI tools (Claude via Claude Code CLI) were used as a development aid throughout the project. All AI-generated code was reviewed, tested, and in several cases manually corrected before committing. A full AI interaction log with prompts, generated output, and critical evaluation is included in individual team member files.
 
 ### Deployed Contract
 The `MessageDigest` smart contract is deployed on Ethereum Sepolia testnet at:
