@@ -72,6 +72,7 @@ Bytes hkdf_expand(const Hash& prk, const Bytes& info, size_t L) {
 
 const Bytes& kem_suite_id() {
     static const Bytes id = [] {
+        // 0x0020 is the id for the x25519 kem
         Bytes b; put(b, "KEM"); auto k = i2osp(0x0020, 2); put(b, k.data(), k.size()); return b;
     }();
     return id;
@@ -79,6 +80,7 @@ const Bytes& kem_suite_id() {
 const Bytes& hpke_suite_id() {
     static const Bytes id = [] {
         Bytes b; put(b, "HPKE");
+        // ids for x25519 kem, hkdf-sha256 kdf, chacha20poly1305 aead
         for (uint64_t v : {0x0020ULL, 0x0001ULL, 0x0003ULL}) { auto x = i2osp(v, 2); put(b, x.data(), x.size()); }
         return b;
     }();
@@ -171,7 +173,7 @@ CryptoContext::CryptoContext() {
 
 KeyPair CryptoContext::generate_keypair() {
     KeyPair kp{};
-    crypto_kx_keypair(kp.public_key.data(), kp.secret_key.data());
+    crypto_kx_keypair(kp.public_key.data(), kp.secret_key.data());   // x25519 keypair
     return kp;
 }
 
@@ -196,18 +198,18 @@ WrappedKey CryptoContext::wrap_key(const SecretKey& sk, const Kek& kek) {
     WrappedKey w{};
     randombytes_buf(w.nonce.data(), w.nonce.size());
     crypto_aead_xchacha20poly1305_ietf_encrypt(
-        w.ciphertext.data(), nullptr,
+        w.ciphertext.data(), nullptr,   // nullptr: ciphertext length out, unused (size is fixed)
         sk.data(), sk.size(),
         kKekAad, kKekAadLen,
-        nullptr, w.nonce.data(), kek.data());
+        nullptr, w.nonce.data(), kek.data());   // first nullptr: secret nonce, unused by this aead
     return w;
 }
 
 SecretKey CryptoContext::unwrap_key(const WrappedKey& wrapped, const Kek& kek) {
     SecretKey sk{};
     if (crypto_aead_xchacha20poly1305_ietf_decrypt(
-            sk.data(), nullptr,
-            nullptr,
+            sk.data(), nullptr,   // nullptr: plaintext length out, unused (size is fixed)
+            nullptr,              // secret nonce, unused by this aead
             wrapped.ciphertext.data(), wrapped.ciphertext.size(),
             kKekAad, kKekAadLen,
             wrapped.nonce.data(), kek.data()) != 0)
@@ -232,7 +234,7 @@ Sealed CryptoContext::seal_auth(const PublicKey& recipient_pk, const SecretKey& 
         ct.data(), &clen,
         plaintext.data(), plaintext.size(),
         reinterpret_cast<const unsigned char*>(aad.data()), aad.size(),
-        nullptr, ctx.base_nonce.data(), ctx.key.data());
+        nullptr, ctx.base_nonce.data(), ctx.key.data());   // nullptr: secret nonce, unused by this aead
     ct.resize(clen);
     sodium_memzero(ctx.key.data(), ctx.key.size());
 
@@ -252,7 +254,7 @@ std::vector<unsigned char> CryptoContext::open_auth(const PublicKey& enc,
     std::vector<unsigned char> pt(ciphertext.size());
     unsigned long long ptlen = 0;
     int rc = crypto_aead_chacha20poly1305_ietf_decrypt(
-        pt.data(), &ptlen, nullptr,
+        pt.data(), &ptlen, nullptr,   // nullptr: secret nonce, unused by this aead
         ciphertext.data(), ciphertext.size(),
         reinterpret_cast<const unsigned char*>(aad.data()), aad.size(),
         ctx.base_nonce.data(), ctx.key.data());

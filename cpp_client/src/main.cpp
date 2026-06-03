@@ -38,10 +38,10 @@ std::string prompt_password(const std::string& prompt) {
     return pw;
 }
 
-// puts the terminal in a raw-ish mode for the chat line editor: character-at-a-
-// time, no driver echo (we echo ourselves so a background redraw can't clobber
-// the in-progress line), but signals stay on so Ctrl-C still works. restores the
-// previous settings on destruction — on every exit path out of the chat loop.
+// raw-ish terminal mode for the chat line editor: character-at-a-time input,
+// driver echo off (we echo ourselves so a background redraw can't clobber the
+// in-progress line), signals left on so ctrl-c still works. previous settings
+// are restored on destruction, covering every exit path out of the chat loop.
 class RawMode {
 public:
     RawMode() {
@@ -117,7 +117,7 @@ bool thread_changed(const std::vector<Message>& a, const std::vector<Message>& b
 void run_chat(Client& client, const std::string& peer) {
     RawMode raw;   // restored on every return path below
 
-    std::string input;              // line being composed — we own it, so a
+    std::string input;              // line being composed; we own it so a
                                     // background redraw can't clobber it
     bool pending_refresh = false;   // a change arrived while you were typing
 
@@ -175,7 +175,7 @@ void run_chat(Client& client, const std::string& peer) {
     while (true) {
         struct pollfd pfd{ STDIN_FILENO, POLLIN, 0 };
         int r = poll(&pfd, 1, kSyncIntervalMs);
-        if (r < 0) { if (errno == EINTR) continue; break; }
+        if (r < 0) { if (errno == EINTR) continue; break; }   // retry if a signal interrupted the wait
 
         if (r == 0) {
             // idle tick: pull from the server, then reflect any change
@@ -212,6 +212,7 @@ void run_chat(Client& client, const std::string& peer) {
                 }
             }
             else if (c == 0x7f || c == 0x08) {                   // backspace / delete
+                // "\b \b" walks back, overwrites the glyph with a space, walks back again
                 if (!input.empty()) { input.pop_back(); std::cout << "\b \b" << std::flush; }
                 else if (pending_refresh) full_reprint();        // empty line + deferred change
             }
@@ -315,7 +316,7 @@ int main(int argc, char** argv) {
     try {
         Client client(host, port, ca_bundle);
         if (command.empty()) { run_repl(client); return 0; }
-        if (command == "health") return client.health();   // one-shot convenience
+        if (command == "health") return client.health();   // one-shot: exit code is the health result
         std::cerr << "unknown one-shot command: " << command
                   << " (run with no command for the interactive shell)\n";
         return 2;

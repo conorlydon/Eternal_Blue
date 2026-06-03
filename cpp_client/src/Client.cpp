@@ -55,14 +55,14 @@ std::string ms_to_iso(long long ms) {
     return std::string(buf);
 }
 
-// canonical AAD (protocol §4): sender_id | recipient_id | sent_at_ms
+// canonical AAD : sender_id | recipient_id | sent_at_ms
 std::string make_aad(const std::string& sender_id, const std::string& recipient_id, long long sent_at_ms) {
     return sender_id + "|" + recipient_id + "|" + std::to_string(sent_at_ms);
 }
 
 constexpr const char* kMsgInfo = "eternal-blue-msg-v1";
 
-}  // namespace
+}  
 
 Client::Client(std::string_view host, std::string_view port, std::string_view ca_bundle)
     : http_(host, port, ca_bundle),
@@ -88,7 +88,7 @@ int Client::signup(std::string_view username, std::string_view password) {
     WrappedKey wrapped = crypto_.wrap_key(kp.secret_key, kek);
     sodium_memzero(kek.data(), kek.size());
 
-    // persist the wrapped key locally BEFORE publishing (protocol §3) so a lost
+    // persist the wrapped key locally BEFORE publishing so a lost
     // response never leaves a published public key with no recoverable private key
     keystore_.save({salt, wrapped});
 
