@@ -21,12 +21,15 @@ export default async function authRoutes(app) {
   }, async (req, reply) => {
     const { username, password, public_key, encrypted_private_key } = req.body
     try {
+      // Hash with Argon2id - memory-hard, resistant to GPU/ASIC brute force.
+      // 64 MB memory, 3 iterations, 1 thread - meets OWASP minimum recommendations.
       const hash = await argon2.hash(password, {
         type: argon2.argon2id,
         memoryCost: 65536,
         timeCost: 3,
         parallelism: 1
       })
+      // parameterised placeholders - prevent sql injection
       const { rows } = await pool.query(
         `INSERT INTO users (username, password_hash, public_key, encrypted_private_key)
          VALUES ($1, $2, $3, $4)
@@ -35,6 +38,7 @@ export default async function authRoutes(app) {
       )
       return reply.code(201).send({ user_id: rows[0].id, username: rows[0].username })
     } catch (err) {
+      // err.code 23505 is PostgreSQL's unique_violation - username already exists.
       if (err.code === '23505') {
         return reply.code(409).send({ error: 'CONFLICT', message: 'Username already taken' })
       }
@@ -44,6 +48,7 @@ export default async function authRoutes(app) {
 
   // POST /api/auth/login
   app.post('/auth/login', {
+    // Tighter limit than the global 100/min - brute-force protection on login.
     config: {
       rateLimit: { max: 10, timeWindow: '1 minute' }
     },
@@ -64,6 +69,8 @@ export default async function authRoutes(app) {
       'SELECT * FROM users WHERE username = $1',
       [username]
     )
+    // Always return 401 for both "user not found" and "wrong password" —
+    // a generic message prevents username enumeration.
     if (rows.length === 0) {
       return reply.code(401).send({ error: 'UNAUTHORIZED', message: 'Invalid credentials' })
     }
@@ -123,6 +130,8 @@ export default async function authRoutes(app) {
       timeCost: 3,
       parallelism: 1
     })
+    // COALESCE keeps the existing encrypted_private_key if no new one is supplied —
+    // allows a plain password change without re-uploading the key blob.
     await pool.query(
       'UPDATE users SET password_hash = $1, encrypted_private_key = COALESCE($2, encrypted_private_key) WHERE id = $3',
       [newHash, encrypted_private_key ?? null, user.id]

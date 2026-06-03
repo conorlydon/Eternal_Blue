@@ -36,7 +36,11 @@ export default async function conversationRoutes(app) {
   }, async (req, reply) => {
     const userId = req.user.user_id
     const { conversation_id } = req.params
+    // Cap at 100 to prevent a client requesting an unbounded number of messages.
+    // Defaults to 50 if no limit query param is provided.
     const limit  = Math.min(parseInt(req.query.limit) || 50, 100)
+    // Cursor-based pagination — only return messages sent before this timestamp.
+    // Defaults to now so the first request gets the most recent window.
     const before = req.query.before || new Date().toISOString()
 
     const { rows: conv } = await pool.query(
@@ -56,6 +60,8 @@ export default async function conversationRoutes(app) {
     const with_user_id  = conv[0].user_a_id === userId ? conv[0].user_b_id       : conv[0].user_a_id
     const with_username = conv[0].user_a_id === userId ? conv[0].user_b_username  : conv[0].user_a_username
 
+    // Exclude messages the user has soft-deleted and any that have been revoked.
+    // r.id IS NULL filters out revoked messages via the LEFT JOIN.
     const { rows: countRows } = await pool.query(
       `SELECT COUNT(*) AS total
        FROM messages m

@@ -1,11 +1,13 @@
 import { CipherSuite, DhkemX25519HkdfSha256, HkdfSha256 }
-  from 'https://esm.sh/@hpke/core@1.7.1'
+  from '/lib/hpke.bundle.js'
 import { Chacha20Poly1305 }
-  from 'https://esm.sh/@hpke/chacha20poly1305@1.7.1'
+  from '/lib/hpke.bundle.js'
 
 const API = '/api'
 const HPKE_INFO = new TextEncoder().encode('eternal-blue-msg-v1')
 
+// Global app state — single object keeps all session data in one place and
+// makes it easy to wipe on logout (no scattered module-level variables).
 const S = {
   token: null, userId: null, username: null,
   privateKey: null, publicKey: null,

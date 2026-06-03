@@ -40,6 +40,9 @@ export default async function messageRoutes(app) {
           OR (user_a_id = $2 AND user_b_id = $1)`,
       [senderId, recipientId]
     )
+    // Store participants in ascending UUID order to prevent a race condition where
+    // two users message each other simultaneously and both insert a new conversation.
+    // The DB enforces a CHECK constraint on this ordering as a second line of defence.
     if (convRows.length === 0) {
       const [user_a_id, user_b_id] = senderId < recipientId
         ? [senderId, recipientId]
@@ -54,6 +57,8 @@ export default async function messageRoutes(app) {
     const conversationId = convRows[0].id
 
     // insert message + queue digest in one transaction
+    // Use a transaction so the message and its digest entry are always written
+    // together — a crash between the two inserts would leave an unverifiable message.
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -74,6 +79,8 @@ export default async function messageRoutes(app) {
       )
 
       // queue digest
+      // Hash the raw ciphertext bytes (decoded from base64) rather than the base64
+      // string itself — ensures the on-chain digest matches what the C++ client computes.
       const digest = keccak256(Buffer.from(ciphertext, 'base64'))
       await client.query(
         `INSERT INTO digest_queue (message_id, digest) VALUES ($1, $2)`,
@@ -87,6 +94,7 @@ export default async function messageRoutes(app) {
       await client.query('ROLLBACK')
       throw err
     } finally {
+      // always release the connection back to the pool, regardless of if the transaction threw or not
       client.release()
     }
   })
@@ -206,6 +214,8 @@ export default async function messageRoutes(app) {
     if (msg.revocation_id !== null) {
       return reply.code(403).send({ error: 'REVOKED', message: 'This message has been revoked' })
     }
+    // Strip internal fields before sending — the client has no need to see
+    // deleted_by_* flags or the raw revocation_id.
     const { deleted_by_sender, deleted_by_recipient, revocation_id, ...response } = msg
     return reply.send(response)
   })
@@ -224,6 +234,8 @@ export default async function messageRoutes(app) {
     }
     const msg = rows[0]
     if (msg.sender_id === userId) {
+      // Soft delete - set a flag for the requesting user's side only. The other
+      // participant's view is unaffected, and the blockchain audit trail stays intact.
       await pool.query(
         'UPDATE messages SET deleted_by_sender = TRUE WHERE id = $1',
         [req.params.id]

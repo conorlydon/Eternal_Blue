@@ -18,14 +18,14 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // Local dev terminates TLS in Fastify itself (self-signed cert).
-// The VM terminates TLS in nginx and proxies plain HTTP to here — in that
+// The VM terminates TLS in nginx and proxies plain HTTP to here - in that
 // deployment, TLS_CERT/TLS_KEY are unset and Fastify falls back to plain HTTP.
 const useTls = process.env.TLS_CERT && process.env.TLS_KEY
 const app = Fastify({
   logger: true,
   // Behind nginx, the socket peer is always the proxy. Trust X-Forwarded-For so
   // req.ip reflects the real client (needed for IP-keyed limits on login/register,
-  // which have no token to key on). See nginx note below — the proxy must set XFF.
+  // which have no token to key on). See nginx note below - the proxy must set XFF.
   trustProxy: true,
   ...(useTls && {
     https: {
@@ -35,7 +35,7 @@ const app = Fastify({
   })
 })
 
-// CORS — locked to the project domain; override via CORS_ORIGIN for local dev
+// CORS - locked to the project domain; override via CORS_ORIGIN for local dev
 await app.register(cors, {
   origin: process.env.CORS_ORIGIN || 'https://eternal-blue.theburkenator.com',
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -47,10 +47,10 @@ await app.register(helmet, {
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      // app.js is served from 'self'; it imports from esm.sh — no unsafe-inline needed
-      scriptSrc:  ["'self'", "https://esm.sh", "https://cdn.esm.sh"],
-      // no scriptSrcAttr — zero inline event handlers in the HTML
-      connectSrc: ["'self'", "https://esm.sh"],
+      // app.js and its HPKE bundle are served from 'self' - no unsafe-inline needed
+      scriptSrc:  ["'self'"],
+      // no scriptSrcAttr - zero inline event handlers in the HTML
+      connectSrc: ["'self'"],
       imgSrc:     ["'self'", "data:"],
       styleSrc:   ["'self'", "'unsafe-inline'"],
     }
@@ -59,19 +59,19 @@ await app.register(helmet, {
   noSniff: true,
 })
 
-// jwt — registered before the rate limiter so its keyGenerator can verify tokens
+// jwt - registered before the rate limiter so its keyGenerator can verify tokens
 await app.register(jwt, {
   secret: process.env.JWT_SECRET
 })
 
-// rate limiting — key by the authenticated user when a valid bearer token is
+// rate limiting - key by the authenticated user when a valid bearer token is
 // present, otherwise fall back to client IP. This is what makes limiting work
 // behind nginx: authenticated traffic is bucketed per user (the proxy's shared
 // IP no longer collapses everyone into one bucket), while unauthenticated routes
 // (login/register) stay IP-keyed via trustProxy + X-Forwarded-For.
-//
+
 // The limiter's onRequest hook runs before route-level app.authenticate, so
-// req.user isn't set yet here — we verify the token ourselves. A bad/expired
+// req.user isn't set yet here - we verify the token ourselves. A bad/expired
 // token falls through to IP so it can't be used to dodge the limit.
 await app.register(rateLimit, {
   max: 100,
@@ -83,14 +83,14 @@ await app.register(rateLimit, {
         const { user_id } = app.jwt.verify(auth.slice(7))
         return `user:${user_id}`
       } catch {
-        // invalid/expired — fall through to IP
+        // invalid/expired - fall through to IP
       }
     }
     return req.ip
   }
 })
 
-// auth decorator — add to any route with onRequest: [app.authenticate]
+// auth decorator - add to any route with onRequest: [app.authenticate]
 app.decorate('authenticate', async (req, reply) => {
   try {
     await req.jwtVerify()
@@ -99,6 +99,8 @@ app.decorate('authenticate', async (req, reply) => {
   }
 })
 
+// ES modules lack __dirname — reconstruct it from import.meta.url, then serve
+// the frontend folder as static files at the root path.
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 await app.register(staticFiles, {
   root: path.join(__dirname, '../frontend'),

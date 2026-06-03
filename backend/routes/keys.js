@@ -2,6 +2,8 @@ import pool from '../db/index.js'
 
 export default async function keyRoutes(app) {
 
+  // Public key lookup — any authenticated user can fetch another user's
+  // public key to encrypt a message to them (TOFU trust model).
   // GET /api/keys/:username
   app.get('/keys/:username', {
     onRequest: [app.authenticate]
@@ -37,6 +39,8 @@ export default async function keyRoutes(app) {
         additionalProperties: false
       }
     }
+    // Incrementing key_version lets clients detect if a peer's key has changed
+    // since they last fetched it which is important for TOFU key pinning.
   }, async (req, reply) => {
     const { rows } = await pool.query(
       `UPDATE users

@@ -2,6 +2,8 @@ import pool from '../db/index.js'
 
 export default async function blockchainRoutes(app) {
 
+  // No auth required — public endpoint so the verification page can query
+  // digest status without a user session.
   // GET /api/blockchain/digest/:message_id
   app.get('/blockchain/digest/:message_id', async (req, reply) => {
     const { message_id } = req.params
@@ -26,6 +28,8 @@ export default async function blockchainRoutes(app) {
     }
 
     const r = rows[0]
+    // batch_id is null while the message is still queued but not yet flushed
+    // to the chain — return 404 rather than a partial response.
     if (r.batch_id === null) {
       return reply.code(404).send({ error: 'NOT_FOUND', message: 'No on-chain record yet' })
     }
@@ -48,6 +52,8 @@ export default async function blockchainRoutes(app) {
   app.get('/blockchain/batch/:batch_id', async (req, reply) => {
     const { batch_id } = req.params
 
+    // Returns digests in queued_at order — callers must use this same order
+    // to reproduce the batch hash (keccak256 is order-sensitive).
     const { rows } = await pool.query(
       `SELECT dq.message_id, dq.digest
        FROM digest_queue dq
@@ -99,6 +105,7 @@ export default async function blockchainRoutes(app) {
       if (log.address.toLowerCase() === CONTRACT_ADDRESS) {
         return reply.send({
           on_chain_batch_hash: log.topics[1],
+          // blockNumber comes back from the RPC as a hex string - parse to decimal.
           block_number: parseInt(receipt.blockNumber, 16),
           tx_hash: receipt.transactionHash
         })
