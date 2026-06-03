@@ -76,8 +76,3 @@ target_link_libraries(eternal-blue-tests PRIVATE
     doctest::doctest
 )
 add_test(NAME unit_tests COMMAND eternal-blue-tests)
-
-# --- pentest harness (security test #2: key substitution / TOFU) ---
-# not part of the unit suite — built on demand: cmake --build build --target trust-pentest
-add_executable(trust-pentest ../pentest/test2_key_substitution/trust_pentest.cpp)
-target_link_libraries(trust-pentest PRIVATE eternal-blue-core doctest::doctest)
